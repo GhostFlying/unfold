@@ -400,7 +400,16 @@ export function ReviewPage({
           ) : null}
           {!active && runs[0]?.state === "failed" ? (
             <div className="inline-alert error">
-              本次调查失败：{runs[0].error}。已有讲解仍然保留。
+              本次调查失败：
+              {runs[0].errorCode === "agent_output_limit" ||
+              runs[0].error?.includes("model output limit exceeded")
+                ? "模型单次输出达到长度上限"
+                : runs[0].error}
+              。
+              {explanation ? "已有讲解仍然保留。" : "本次未生成可发布的讲解。"}
+              {runs[0].progress?.savedParts
+                ? "已保存的片段仍可通过 CLI 读取。"
+                : ""}
             </div>
           ) : null}
           {tab === "guide" ? (

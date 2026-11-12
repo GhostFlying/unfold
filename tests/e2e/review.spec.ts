@@ -38,6 +38,9 @@ test("new run feedback streams live, recovers after reload and reconnect, and re
     await control("progress");
     await expect(panel).toContainText("19,600", { timeout: 15000 });
     await expect(panel).toContainText("8,234 字符");
+    await expect(panel.getByLabel("已保存的讲解片段")).toContainText(
+      "3 个生成片段",
+    );
     await page.reload();
     await expect(panel).toContainText("19,600");
     await panel.getByText("任务详情与进度记录").click();
@@ -60,6 +63,9 @@ test("new run feedback streams live, recovers after reload and reconnect, and re
     await expect(panel).toContainText("19,600");
     await expect(panel.getByRole("button", { name: "停止" })).toHaveCount(0);
     await expect(panel).toContainText("其中缓存 14,000");
+    await expect(panel.getByLabel("已保存的讲解片段")).toContainText(
+      "3 个生成片段",
+    );
     expect(errors).toEqual([]);
   } finally {
     await control("cleanup");
@@ -685,4 +691,57 @@ test("logical groups open individual change explanations with source and scoped 
     guide.getByRole("heading", { name: "从修改目的开始阅读。" }),
   ).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test("length failures distinguish an unpublished run from a retained previous explanation", async ({
+  page,
+}) => {
+  await openOwner(page);
+  const reviewId = new URL(page.url()).pathname.split("/")[2];
+  let keepPrevious = false;
+  await page.route(`**/api/v1/reviews/${reviewId}`, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    if (!keepPrevious) delete body.data.explanation;
+    await route.fulfill({ json: body });
+  });
+  await page.route(`**/api/v1/reviews/${reviewId}/runs`, (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        data: [
+          {
+            id: "failed-segmented-run",
+            reviewId,
+            kind: "analysis",
+            state: "failed",
+            backend: "traex",
+            model: "test-model",
+            error: "model output limit exceeded: length",
+            errorCode: "agent_output_limit",
+            createdAt: new Date().toISOString(),
+            progress: {
+              stage: "generating",
+              message: "Saved",
+              savedParts: 2,
+              savedChars: 4000,
+              at: new Date().toISOString(),
+            },
+          },
+        ],
+      },
+    }),
+  );
+  await page.reload();
+  const alert = page.locator(".inline-alert.error");
+  await expect(alert).toContainText("模型单次输出达到长度上限");
+  await expect(alert).toContainText("本次未生成可发布的讲解");
+  await expect(alert).not.toContainText("已有讲解仍然保留");
+  await expect(alert).toContainText("已保存的片段仍可通过 CLI 读取");
+  await expect(page.getByLabel("已保存的讲解片段")).toContainText(
+    "2 个生成片段",
+  );
+  keepPrevious = true;
+  await page.reload();
+  await expect(alert).toContainText("已有讲解仍然保留");
 });

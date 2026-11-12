@@ -76,6 +76,21 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
       JSON.parse(run.stdout).data.requestedUrl,
       "/api/v1/runs/durable-run",
     );
+    const artifact = await cli(
+      [
+        "--server",
+        `http://127.0.0.1:${port}`,
+        "artifact",
+        "failed-run",
+        "--content",
+      ],
+      root,
+    );
+    assert.equal(artifact.exit, 0, artifact.stderr);
+    assert.equal(
+      JSON.parse(artifact.stdout).data.requestedUrl,
+      "/api/v1/runs/failed-run/artifact?content=1",
+    );
     for (const [flag, expected] of [
       ["--effort", "high"],
       ["--model-default-effort", null],

@@ -84,6 +84,8 @@ test("progress and observed usage survive a service restart, including cancelled
       source: "agent",
       message: "Verified the source",
       filesRead: 3,
+      savedParts: 2,
+      savedChars: 4000,
     });
     f.service.record(run.id, { type: "usage", usage: counts(1000) });
     f.service.cancel(run.id);
@@ -92,6 +94,8 @@ test("progress and observed usage survive a service restart, including cancelled
     const saved = f.service.store.get<Run>("run", run.id);
     assert.equal(saved.state, "interrupted");
     assert.equal(saved.progress?.message, "Verified the source");
+    assert.equal(saved.progress?.savedParts, 2);
+    assert.equal(saved.progress?.savedChars, 4000);
     assert.equal(saved.usage?.totalTokens, 1020);
     assert.equal(saved.usage?.cachedInputTokens, 500);
     assert.ok(saved.progress?.at && saved.usage?.updatedAt);

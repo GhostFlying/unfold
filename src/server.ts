@@ -24,6 +24,7 @@ import { equal } from "./util.js";
 import { parentCsp, exportHtml } from "./html.js";
 import { backendConnectionRevision } from "./connector-runtime.js";
 import { Service } from "./service.js";
+import { ArtifactDraft } from "./artifact-draft.js";
 
 const backend = z.enum(["traex", "codex"]);
 const modelProfile = z.object({
@@ -547,6 +548,22 @@ export async function createServer(service: Service, owner: boolean) {
     app.post("/api/v1/runs/:id/cancel", async (req) =>
       ok(service.cancel(param(req, "id"))),
     );
+    app.get("/api/v1/runs/:id/artifact", async (req) => {
+      const run = service.store.get<Run>("run", param(req, "id"));
+      if (run.kind !== "analysis")
+        throw new AppError(
+          "invalid_run_kind",
+          "Private questions do not create explanation parts",
+        );
+      const query = z
+        .object({ content: z.enum(["0", "1"]).optional() })
+        .parse(req.query);
+      return ok(
+        new ArtifactDraft(service.config.dataDir, run.id, run.versionId).read(
+          query.content === "1",
+        ),
+      );
+    });
     app.get("/api/v1/runs/:id/events", async (req, res) => {
       const runId = param(req, "id");
       service.store.get<Run>("run", runId);

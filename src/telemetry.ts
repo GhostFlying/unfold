@@ -22,6 +22,12 @@ export function applyRunEvent(run: Run, event: AgentEvent): Run {
       ...(typeof event.outputChars === "number"
         ? { outputChars: event.outputChars }
         : {}),
+      ...(typeof event.savedParts === "number"
+        ? { savedParts: event.savedParts }
+        : {}),
+      ...(typeof event.savedChars === "number"
+        ? { savedChars: event.savedChars }
+        : {}),
     };
     const activity = [...(run.activity || [])];
     const previous = activity.at(-1);

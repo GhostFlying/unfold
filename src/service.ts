@@ -499,12 +499,14 @@ export class Service {
       if (run.state !== "interrupted") {
         run.state = "failed";
         run.error = e.message;
+        run.errorCode = e.code;
         run.finishedAt = now();
         this.store.put("run", run);
         this.record(run.id, {
           type: "finished",
           state: run.state,
           error: run.error,
+          code: run.errorCode,
         });
       }
     } finally {

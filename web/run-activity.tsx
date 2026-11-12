@@ -96,6 +96,12 @@ export function RunActivity({
         {run.backend} · {run.model || "backend default"}
         {run.effort ? ` · ${run.effort}` : ""}
       </div>
+      {run.progress?.savedParts ? (
+        <p className="usage-note" aria-label="已保存的讲解片段">
+          已保存 {number(run.progress.savedParts)} 个生成片段 ·{" "}
+          {number(run.progress.savedChars || 0)} 字符
+        </p>
+      ) : null}
       {active && run.progress ? (
         <p className="run-current" role="status">
           {run.progress.message}
@@ -114,7 +120,7 @@ export function RunActivity({
             <span>已读取 {run.progress.filesRead} 份源码</span>
           ) : null}
           {run.progress?.toolCalls !== undefined ? (
-            <span>{run.progress.toolCalls} 次调查操作</span>
+            <span>{run.progress.toolCalls} 次操作</span>
           ) : null}
           {run.progress?.stage === "generating" && run.progress.outputChars ? (
             <span>已生成 {number(run.progress.outputChars)} 字符</span>

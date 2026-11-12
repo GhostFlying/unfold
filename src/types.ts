@@ -150,6 +150,7 @@ export interface Run {
   explanationId?: string;
   answer?: string;
   error?: string;
+  errorCode?: string;
   createdAt: string;
   finishedAt?: string;
 }
@@ -168,6 +169,8 @@ export interface RunProgress {
   outputChars?: number;
   toolCalls?: number;
   filesRead?: number;
+  savedParts?: number;
+  savedChars?: number;
 }
 export interface TokenCounts {
   inputTokens: number;

@@ -475,6 +475,24 @@ program
   .action(wrap(async (review) => out(await api(`/reviews/${review}/runs`))));
 program.command("watch <run>").action(wrap(async (run) => wait(run)));
 program
+  .command("artifact <run>")
+  .description(
+    "Inspect privately saved explanation parts, including failed/interrupted runs",
+  )
+  .option(
+    "--content",
+    "Include saved part content; incomplete HTML is not published",
+  )
+  .action(
+    wrap(async (run, options) =>
+      out(
+        await api(
+          `/runs/${run}/artifact${options.content ? "?content=1" : ""}`,
+        ),
+      ),
+    ),
+  );
+program
   .command("run <run>")
   .description("Read a persisted run, progress and per-run token usage")
   .action(wrap(async (run) => out(await api(`/runs/${run}`))));

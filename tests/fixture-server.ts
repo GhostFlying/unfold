@@ -77,6 +77,8 @@ owner.post("/__fixture/telemetry", async (req) => {
       stage: "generating",
       message: "正在生成交互讲解",
       outputChars: 8234,
+      savedParts: 3,
+      savedChars: 8234,
       filesRead: 7,
       toolCalls: 11,
     });
