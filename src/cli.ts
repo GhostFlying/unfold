@@ -163,6 +163,10 @@ async function wait(runId: string) {
         if (!data) continue;
         const event = JSON.parse(data.slice(6));
         if (!program.opts().json && event.message) console.error(event.message);
+        if (!program.opts().json && event.type === "usage")
+          console.error(
+            `本次 token：${event.usage.totalTokens.toLocaleString("en-US")} · 输入 ${event.usage.inputTokens.toLocaleString("en-US")}（缓存 ${event.usage.cachedInputTokens.toLocaleString("en-US")}）· 输出 ${event.usage.outputTokens.toLocaleString("en-US")}（推理 ${event.usage.reasoningOutputTokens.toLocaleString("en-US")}）`,
+          );
         if (event.type === "finished" || event.type === "approval") {
           run = await api(`/runs/${runId}`);
           if (terminal()) return finishRun(run);
@@ -377,6 +381,19 @@ program
       out(await api(`/reviews/${review}/refresh`, "POST", {})),
     ),
   );
+program
+  .command("guide <review>")
+  .description("Read logical change groups or one change point")
+  .option("--explanation <id>")
+  .option("--point <id>")
+  .action(
+    wrap(async (review, o) => {
+      const query = new URLSearchParams();
+      if (o.explanation) query.set("explanationId", o.explanation);
+      if (o.point) query.set("point", o.point);
+      out(await api(`/reviews/${review}/guide?${query}`));
+    }),
+  );
 program.command("backend <review> <backend>").action(
   wrap(async (review, backend) =>
     out(
@@ -431,6 +448,10 @@ program
   .command("runs <review>")
   .action(wrap(async (review) => out(await api(`/reviews/${review}/runs`))));
 program.command("watch <run>").action(wrap(async (run) => wait(run)));
+program
+  .command("run <run>")
+  .description("Read a persisted run, progress and per-run token usage")
+  .action(wrap(async (run) => out(await api(`/runs/${run}`))));
 program
   .command("cancel <run>")
   .action(

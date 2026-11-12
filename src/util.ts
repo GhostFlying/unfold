@@ -58,20 +58,39 @@ export async function command(
     ),
   );
 }
-export function jsonObject(text: string) {
+export function structuredReply(text: string) {
   const stripped = text
     .trim()
     .replace(/^```(?:json)?\s*/, "")
     .replace(/\s*```$/, "");
   try {
-    return JSON.parse(stripped);
+    return { output: JSON.parse(stripped), commentary: "" };
   } catch {
+    // Some backends merge public commentary and their final structured object.
+    // Only accept a complete trailing JSON object, never scrape arbitrary braces
+    // from generated HTML or accept additional prose after the object.
+    let start = stripped.indexOf("{");
+    for (let attempt = 0; start >= 0 && attempt < 32; attempt++) {
+      try {
+        return {
+          output: JSON.parse(stripped.slice(start)),
+          commentary: stripped
+            .slice(0, start)
+            .replace(/```(?:json)?\s*$/, "")
+            .trim(),
+        };
+      } catch {}
+      start = stripped.indexOf("{", start + 1);
+    }
     throw new AppError(
       "invalid_agent_output",
       "The backend did not return the requested structured result",
       502,
     );
   }
+}
+export function jsonObject(text: string) {
+  return structuredReply(text).output;
 }
 export const escapeHtml = (s: string) =>
   s.replace(

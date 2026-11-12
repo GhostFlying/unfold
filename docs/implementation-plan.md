@@ -46,3 +46,21 @@ Expose model catalogs and supported reasoning efforts through the connector, own
 - Apply an immutable connection-settings revision only while the connector is idle. Active investigations, execution approvals and platform writeback finish with their original runtime. Pending saved settings apply automatically when work drains; expose applied/pending/failed status through the owner API, CLI and settings dialog.
 - Validate changed native connections and expose readiness failures as saved-but-not-applied outcomes. New work must not silently use an older connection after a failed reload. Update managed authentication symlinks only at the idle boundary and preserve backend homes/history.
 - Add focused coverage for unchanged saves, real changes, deferred application, readiness failure, protected status endpoints and browser feedback. Deploy and verify the settings flow on the existing single-owner installation without replaying comments or approved execution.
+- Retain immutable connection identities while applying settings online.
+
+## Investigation feedback and per-run token usage
+
+- Forward public agent progress messages, version-bound tool start/completion, and answer-generation activity through the existing owner-only event stream. Never expose internal reasoning or partial generated HTML as progress prose.
+- Persist timestamped progress, a short activity history, and backend-reported token usage on each run. Web and CLI show the same data, elapsed time, and last observed activity without inventing percentages or treating silence as a proven stall.
+- Use native cumulative usage snapshots with a verified pre-turn baseline for resumed sessions. Repeated snapshots replace totals; cached input is included in input, and reasoning is included in output. Missing data stays unavailable; cancelled/failed runs retain observed partial usage.
+- Add a compact expandable run panel to the existing reader, including completed runs and question runs. Recover event streams after disconnects and preserve progress across page reloads; never rerun analysis to recover its display.
+- Verify both locally exported app-server protocols, aggregation across fresh/resumed turns, replay/disconnect behavior, visitor isolation, desktop/mobile rendering, and a real native question. Deploy only after active work drains.
+- Apply feedback and usage collection to new runs only; existing explanations remain unchanged and historical runs without usage continue to say unavailable.
+- Store full explanation HTML only in its local artifact file; SQLite retains metadata and a relative artifact path. Migrate legacy embedded HTML only after atomic file save, hydrate existing API/CLI responses on reads, and retain the existing authenticated/public read boundaries and fixed URLs.
+
+## Logical change guide
+
+- Provide a dedicated guide organized by behavior/purpose rather than a flat file list. An overview lists logical groups and their individual change points; selecting a point opens its before/after behavior, rationale, risks and validated source references.
+- New native analyses produce a small structured guide alongside the self-contained whole-change HTML. Validate group/point bounds and reference IDs against actual pinned source reads; untrusted output never becomes executable host UI.
+- Persist the structured guide with explanation metadata, expose it in read-only shared APIs and an explicit CLI command, and keep full HTML in its artifact file. Historical explanations without a guide remain readable with an honest empty state; do not invent categories from file names or silently reanalyze them.
+- Match the existing restrained reader, provide keyboard/mobile navigation and source jumps, and acknowledge pulls.review for the grouping interaction without copying its platform or source.

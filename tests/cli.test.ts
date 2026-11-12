@@ -61,6 +61,15 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
     const bad = await cli(["invented-command"], root);
     assert.equal(bad.exit, 2);
     assert.equal(JSON.parse(bad.stderr).error.code, "invalid_input");
+    const run = await cli(
+      ["--server", `http://127.0.0.1:${port}`, "run", "durable-run"],
+      root,
+    );
+    assert.equal(run.exit, 0, run.stderr);
+    assert.equal(
+      JSON.parse(run.stdout).data.requestedUrl,
+      "/api/v1/runs/durable-run",
+    );
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });

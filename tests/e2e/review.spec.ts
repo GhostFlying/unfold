@@ -10,6 +10,59 @@ async function openOwner(page: Page) {
     page.getByRole("heading", { name: "Make cancellation explicit" }),
   ).toBeVisible();
 }
+test("new run feedback streams live, recovers after reload and reconnect, and retains token usage after completion", async ({
+  page,
+  request,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await openOwner(page);
+  const control = (action: string) =>
+    request.post("http://127.0.0.1:19371/__fixture/telemetry", {
+      headers: {
+        authorization: "Bearer synthetic-test-owner-key-not-a-real-credential",
+      },
+      data: { action },
+    });
+  try {
+    await control("start");
+    await page.reload();
+    const panel = page.getByRole("region", { name: "本次分析" });
+    await expect(panel).toContainText("已核对取消操作，现在检查资源释放路径。");
+    await expect(panel).toContainText("12,600");
+    await expect(panel).toContainText("进度已连接");
+    await control("disconnect");
+    await expect(panel).toContainText("正在恢复事件");
+    await control("progress");
+    await expect(panel).toContainText("19,600", { timeout: 15000 });
+    await expect(panel).toContainText("8,234 字符");
+    await page.reload();
+    await expect(panel).toContainText("19,600");
+    await panel.getByText("任务详情与进度记录").click();
+    await expect(panel.locator(".run-timeline")).toContainText(
+      "已核对取消操作",
+    );
+    await expect(panel.locator(".run-timeline li")).toHaveCount(2);
+    await page.screenshot({ path: "/tmp/unfold-run-progress-desktop.png" });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+    ).toBe(false);
+    await page.screenshot({ path: "/tmp/unfold-run-progress-mobile.png" });
+    await control("finish");
+    await expect(panel).toContainText("本次分析 · 已完成");
+    await expect(panel).toContainText("19,600");
+    await page.reload();
+    await expect(panel).toContainText("19,600");
+    await expect(panel.getByRole("button", { name: "停止" })).toHaveCount(0);
+    await expect(panel).toContainText("其中缓存 14,000");
+    expect(errors).toEqual([]);
+  } finally {
+    await control("cleanup");
+  }
+});
 test("owner reads interactive explanation, selects source, edits a draft and previews without publishing", async ({
   page,
 }) => {
@@ -224,4 +277,55 @@ test("saved pending settings become applied automatically and readiness failures
     "Synthetic readiness failure",
   );
   await expect(page.getByRole("button", { name: "重试应用" })).toBeVisible();
+});
+
+test("logical groups open individual change explanations with source and scoped diff on desktop and mobile", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await openOwner(page);
+  await page.getByRole("button", { name: "改动导览", exact: true }).click();
+  const guide = page.getByRole("region", { name: "逻辑改动导览" });
+  await expect(guide).toContainText("2 组 · 2 项");
+  await expect(
+    guide.getByRole("heading", { name: "取消语义", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "/tmp/unfold-change-guide-overview.png" });
+  const nav = guide.getByRole("navigation", { name: "修改点导航" });
+  await nav.getByRole("button", { name: "把取消检查前移" }).click();
+  const point = guide.getByRole("article", { name: "修改点说明" });
+  await expect(
+    point.getByRole("heading", { name: "把取消检查前移" }),
+  ).toBeVisible();
+  await expect(point).toContainText("先获取 worker，再检查取消状态。");
+  await expect(point).toContainText("先检查取消状态，再获取 worker。");
+  await expect(point).toContainText("为什么这样改");
+  await expect(point).toContainText("影响与待验证");
+  await point.getByRole("button", { name: /src\/queue.ts:2/ }).click();
+  await expect(page.locator(".source-body")).toContainText(
+    "if (item.cancelled) return;",
+  );
+  await page.getByRole("button", { name: "关闭侧栏" }).click();
+  await point.getByRole("button", { name: /src\/queue.ts.*\+1/ }).click();
+  await expect(point.locator(".diff-line.add")).toContainText(
+    "if (item.cancelled) return;",
+  );
+  await page.screenshot({ path: "/tmp/unfold-change-guide-point.png" });
+  await point.getByRole("button", { name: "下一项 →" }).click();
+  await expect(
+    point.getByRole("heading", { name: "缩小资源获取范围" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: "/tmp/unfold-change-guide-mobile.png" });
+  await point.getByRole("button", { name: "返回总览" }).click();
+  await expect(
+    guide.getByRole("heading", { name: "从修改目的开始阅读。" }),
+  ).toBeVisible();
+  expect(errors).toEqual([]);
 });

@@ -31,6 +31,10 @@ Open the owner entry at `http://127.0.0.1:18371`. Retrieve the owner key deliber
 
 All runtime material is under ignored `.local/`: configuration, SQLite, generated HTML, source snapshots, investigation notes, dedicated agent homes, and receipts. It is excluded from Git **and Docker build contexts**. Original CLI credentials remain in their original stores; dedicated backend homes reuse only their authentication files. Neither proprietary CLI implementations nor their complete internal protocols are distributed here.
 
+The **改动导览** view organizes new analyses into logical groups and individual change points, with before/after behavior, rationale, risks, pinned source evidence and scoped diffs. `unfold guide REVIEW --point g1-c1` exposes the same view data to CLI agents. Existing explanations without a guide stay readable and are not regenerated automatically.
+
+New investigations show public agent progress, current source activity, elapsed time and per-run token usage in the owner UI. Progress and usage survive refreshes and restarts; CLI agents can inspect `unfold run RUN --json` or observe `unfold watch RUN`. Full explanation HTML lives in an artifact file, while SQLite stores metadata and its relative path. Back up `.local/data/` as a whole, including the database and artifacts.
+
 ## Codebase first
 
 ```sh

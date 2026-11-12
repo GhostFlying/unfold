@@ -20,11 +20,11 @@ The complex read example and the specifically authorized write target are separa
 
 ## Automated verification
 
-`pnpm check` runs TypeScript checks, 28 focused tests, and a production build. `pnpm test:e2e` runs seven Chromium tests for the reader, source selection and editable preview, viewer restrictions, hostile HTML, mobile layout, and MR model/effort settings.
+`pnpm check` runs TypeScript checks, 38 focused tests, and a production build. `pnpm test:e2e` runs nine Chromium tests for the reader, source selection and editable preview, viewer restrictions, hostile HTML, mobile layout, and MR model/effort settings.
 
 Synthetic tests cover concurrent duplicate import, latest-version changes and old explanations, side-aware diff positions, unknown publication results and marker reconciliation, idempotent/concurrent publishing, explicit general-comment relocation, preview digest changes, restart interruption, private source caches, unshared reviews, API authentication/origin checks, exact single-use execution approvals, and long event-history replay. A real bwrap process with a synthetic snapshot verifies a separate network namespace, an empty credential environment, inaccessible owner files and disposable writes. It is not execution proof for any reviewed repository.
 
-Source snapshots and HTML have private filesystem artifacts alongside their SQLite records. Git ignores and Docker context exclusion protect `.local/` and runtime configuration. Public screenshots contain synthetic data only.
+Source snapshots have private filesystem artifacts. Explanation HTML is stored only in a private artifact file; SQLite retains its relative path and metadata. Legacy inline HTML migrates after a successful atomic file save, and the existing API hydrates HTML on reads. Back up the complete data directory. Git ignores and Docker context exclusion protect `.local/` and runtime configuration. Public screenshots contain synthetic data only.
 
 ## Delivery boundaries
 
@@ -37,3 +37,21 @@ Source snapshots and HTML have private filesystem artifacts alongside their SQLi
 ## Automatic configuration application
 
 Settings saves compare actual values, apply changed connections automatically, and report desired/applied revisions through the settings dialog and CLI. Native investigations, execution approval waits and platform writes keep their original runtime until they finish. New connection readiness is checked in an isolated temporary home; failed checks cannot replace persistent backend authentication or admit new work with an older connection. The connector process does not need to restart for editable settings. Focused tests also cover unchanged forms, queued saves, superseded changes, readiness failures, authentication link changes and protected reload/status endpoints.
+
+## Investigation feedback and usage
+
+New owner runs persist timestamped stages, public agent progress, source-operation counts, generation activity and native-reported run token usage. The UI displays elapsed time and recent activity, restores progress after reload, and reconnects from the last persisted event without duplicating the timeline. Usage replaces cumulative snapshots and subtracts a verified baseline when a private thread resumes; unknown data remains absent. Input includes cached input and output includes reasoning, so subtotals are not added again. Failed and interrupted runs retain observed partial usage. `run`, `runs`, and `watch` expose the same state through the CLI. Existing runs are not backfilled.
+
+Automated checks cover both native protocol shapes with synthetic stdio peers, fresh/resumed usage, duplicate/stale events, terminal success/failure, interrupted persistence, legacy HTML migration, missing artifacts, event replay and transport reconnection. Chromium checks cover live feedback, browser reload, completed usage and desktop/mobile rendering. Live backend acceptance is recorded below.
+
+## Logical change guide
+
+New analyses emit persisted logical groups and individual change points alongside the whole-change HTML. The guide has a grouped overview and point navigation, before/after behavior, rationale, risks, pinned source links and related file diffs. The model output must account for all changed files, and file/reference identities are checked against the immutable investigation. The same guide is exposed through CLI and public read-only APIs; private runs remain inaccessible. Existing explanations without a guide are explicitly identified and never auto-regenerated. The interaction takes inspiration from pulls.review; no reference-project source was copied.
+
+Native compatibility validation also covers commentary merged with a trailing structured response, including same-line output. Restored usage must have consistent input/output/total fields. When a backend restore snapshot lacks those fields, the connector reads only that dedicated thread’s own bounded native receipt to establish the baseline; it never scans personal history or treats incomplete values as zero. Inconsistent retained usage is not presented as valid statistics.
+
+## Live validation of feedback and guides
+
+After deployment, two consecutive private questions on each backend returned persisted public progress and per-run usage. All five token fields were compared with the exact native turn receipts and matched, including restored sessions. An initial merged-response failure remained an explicit failed run; compatibility handling was verified with subsequent requests rather than silently replaying it.
+
+A new Codebase analysis produced two logical groups and four change points from pinned source reads. The deployed owner UI displayed generation activity, restored the final usage and guide after a browser reload, navigated a change point and opened its source. Desktop (1440 × 1050) and mobile (390 × 844) checks had no page errors or horizontal overflow. The company-network viewer read the guide while private run/configuration/approval routes returned 404. CLI reads returned the same persisted run and selected guide point. Existing HTML artifacts were byte-identical across migration, user configuration remained unchanged, and the deployed build matched all 39 locally checked distribution files. Exact targets, screenshots and receipts remain private under `.local/`.

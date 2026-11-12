@@ -14,6 +14,9 @@ import { diffLines } from "../src/diff.js";
 import { frameHtml } from "../src/html.js";
 import { ReviewAgentSettings } from "./agent-settings.js";
 import { api, nav } from "./api.js";
+import { RunActivity, RunUsage } from "./run-activity.js";
+import { applyRunEvent } from "../src/telemetry.js";
+import { ChangeGuideView } from "./change-guide.js";
 
 type Bundle = {
   review: Review;
@@ -48,7 +51,7 @@ export function ReviewPage({
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
-    [progress, setProgress] = useState(""),
+    [streamConnected, setStreamConnected] = useState(false),
     [preview, setPreview] = useState<any>(),
     [general, setGeneral] = useState(false),
     [diffSnapshot, setDiffSnapshot] = useState<Snapshot>();
@@ -96,18 +99,28 @@ export function ReviewPage({
   );
   useEffect(() => {
     if (!active || !owner) return;
-    const events = new EventSource(`/api/v1/runs/${active.id}/events`);
+    setStreamConnected(false);
+    const events = new EventSource(
+      `/api/v1/runs/${active.id}/events?after=${active.eventSeq || 0}`,
+    );
+    events.onopen = () => setStreamConnected(true);
     events.onmessage = (e) => {
       const event = JSON.parse(e.data);
-      if (event.message) setProgress(event.message);
+      setRuns((current) =>
+        current.map((run) =>
+          run.id === active.id ? applyRunEvent(run, event) : run,
+        ),
+      );
       if (event.type === "finished" || event.type === "approval") {
         void reload();
         if (event.type === "finished") events.close();
       }
     };
     events.onerror = () => {
-      events.close();
-      void reload();
+      setStreamConnected(false);
+      // EventSource reconnects with Last-Event-ID. Reload also catches a terminal
+      // run if its final event was lost while this tab was disconnected.
+      void reload().catch(() => {});
     };
     return () => events.close();
   }, [active?.id, owner]);
@@ -167,6 +180,12 @@ export function ReviewPage({
     );
   const { review, version, explanation } = bundle,
     shown = diffSnapshot || version;
+  const displayedRun =
+    active ||
+    runs.find(
+      (r) => r.kind === "analysis" && r.explanationId === explanation?.id,
+    ) ||
+    runs[0];
   const contextBody = () =>
     quote
       ? `${body}\n\n选中上下文：\n${quote
@@ -178,10 +197,11 @@ export function ReviewPage({
     file: FileDiff,
     line: number,
     side: "old" | "new",
+    snapshot = shown,
   ) => {
     if (owner) {
       const ref = await api<Reference>(`/reviews/${id}/references`, "POST", {
-        versionId: shown.id,
+        versionId: snapshot.id,
         path: side === "old" ? file.oldPath : file.path,
         side,
         start: line,
@@ -190,7 +210,7 @@ export function ReviewPage({
       await openReference(ref);
     } else {
       const s = await api<Source>(
-        `/reviews/${id}/source?${new URLSearchParams({ versionId: shown.id, path: side === "old" ? file.oldPath : file.path, side })}`,
+        `/reviews/${id}/source?${new URLSearchParams({ versionId: snapshot.id, path: side === "old" ? file.oldPath : file.path, side })}`,
       );
       setSource(s);
       setSelected(undefined);
@@ -292,6 +312,7 @@ export function ReviewPage({
           </div>
           <nav className="reader-tabs" aria-label="改动内容">
             {[
+              ["guide", "改动导览"],
               ["explanation", "讲解"],
               ["changes", "Diff"],
               ["discussion", `原 MR 讨论 · ${bundle.comments.length}`],
@@ -363,29 +384,43 @@ export function ReviewPage({
               </button>
             </div>
           ) : null}
-          {active ? (
-            <div className="run-status">
-              <span className="pulse-dot" />
-              {active.state === "awaiting_approval"
-                ? "等待你批准具体执行操作"
-                : progress || "Agent 正在调查固定版本源码…"}
-              <button
-                className="quiet"
-                onClick={() =>
-                  action(async () => {
-                    await api(`/runs/${active.id}/cancel`, "POST", {});
-                    await reload();
-                  })
-                }
-              >
-                停止
-              </button>
-            </div>
+          {owner &&
+          displayedRun &&
+          (active || displayedRun.progress || displayedRun.usage) ? (
+            <RunActivity
+              run={displayedRun}
+              connected={streamConnected}
+              onCancel={() =>
+                action(async () => {
+                  await api(`/runs/${active!.id}/cancel`, "POST", {});
+                  await reload();
+                })
+              }
+            />
           ) : null}
           {!active && runs[0]?.state === "failed" ? (
             <div className="inline-alert error">
               本次调查失败：{runs[0].error}。已有讲解仍然保留。
             </div>
+          ) : null}
+          {tab === "guide" ? (
+            <ChangeGuideView
+              key={explanation?.id || id}
+              explanation={explanation}
+              version={version}
+              onReference={(ref) => {
+                void action(() => openReference(ref));
+              }}
+              renderDiff={(file) => (
+                <File
+                  key={file.path}
+                  file={file}
+                  onLine={(line, side) => {
+                    void action(() => selectLine(file, line, side, version));
+                  }}
+                />
+              )}
+            />
           ) : null}
           {tab === "explanation" ? (
             explanation ? (
@@ -647,6 +682,7 @@ export function ReviewPage({
                     .map((r) => (
                       <article className="message" key={r.id}>
                         <div className="question-text">{r.question}</div>
+                        <RunUsage run={r} />
                         <div className="answer-text">
                           {r.answer || r.error || "正在调查…"}
                         </div>

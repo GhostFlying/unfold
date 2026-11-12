@@ -19,6 +19,8 @@ import {
 } from "./types.js";
 import { hash, id, now } from "./util.js";
 import { diffLines, validateAnchor } from "./diff.js";
+import { applyRunEvent } from "./telemetry.js";
+import type { AgentEvent } from "./types.js";
 
 export class Service {
   store: Store;
@@ -319,7 +321,11 @@ export class Service {
     this.store.put("run", run);
     const control = new AbortController();
     this.controllers.set(run.id, control);
-    this.record(run.id, { type: "status", message: "Starting investigation" });
+    this.record(run.id, {
+      type: "status",
+      stage: "starting",
+      message: "正在准备固定版本调查",
+    });
     const previous = this.store
       .list<Run>("run", reviewId)
       .filter(
@@ -374,6 +380,7 @@ export class Service {
         this.token,
         params,
         (event) => {
+          Object.assign(run, this.store.get<Run>("run", run.id));
           if (run.state === "interrupted") return;
           if (event.type === "identity") {
             run.threadId = event.threadId as string;
@@ -427,7 +434,7 @@ export class Service {
             if (run.kind === "analysis") {
               const artifact = event.artifact as Pick<
                 Explanation,
-                "title" | "summary" | "html" | "references"
+                "title" | "summary" | "html" | "references" | "guide"
               >;
               const e: Explanation = {
                 ...artifact,
@@ -504,8 +511,19 @@ export class Service {
     }
   }
   record(runId: string, event: unknown) {
-    const seq = this.store.event(runId, event);
-    this.events.emit(runId, { seq, ...(event as object) });
+    const stamped = { ...(event as AgentEvent), at: now() };
+    let seq: number;
+    this.store.db.exec("BEGIN IMMEDIATE");
+    try {
+      seq = this.store.event(runId, stamped);
+      const run = this.store.maybe<Run>("run", runId);
+      if (run) this.store.put("run", applyRunEvent(run, { seq, ...stamped }));
+      this.store.db.exec("COMMIT");
+    } catch (error) {
+      this.store.db.exec("ROLLBACK");
+      throw error;
+    }
+    this.events.emit(runId, { seq, ...stamped });
   }
   cancel(runId: string) {
     const r = this.store.get<Run>("run", runId);

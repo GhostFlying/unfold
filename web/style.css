@@ -525,19 +525,134 @@ pre {
   font-size: 12px;
   color: #987b46;
 }
-.run-status {
+.run-heading {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 12px 0;
   color: #6b8a6f;
   font-size: 12px;
-  border-bottom: 1px solid var(--rule);
-  margin-bottom: 20px;
 }
-.run-status button {
-  margin-left: auto;
+.run-heading button {
   font-size: 12px;
+}
+.run-panel {
+  border: 1px solid #e7ece7;
+  background: #fcfdfb;
+  border-radius: 7px;
+  padding: 16px 18px;
+  margin: 0 0 22px;
+  min-width: 0;
+}
+.run-heading {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.run-heading strong {
+  color: #445b49;
+  font-size: 12px;
+  font-weight: 600;
+}
+.run-elapsed {
+  margin-left: auto;
+  color: #8a8a90;
+  font-size: 11px;
+}
+.run-model {
+  color: #8a8a90;
+  font-size: 10px;
+  padding-top: 5px;
+  overflow-wrap: anywhere;
+}
+.run-current,
+.run-commentary {
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 12px 0 8px;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.run-commentary {
+  color: #68736a;
+  border-left: 2px solid #c4d5c5;
+  padding-left: 10px;
+}
+.run-observed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: #8a8a90;
+  font-size: 10px;
+  margin-bottom: 12px;
+}
+.run-usage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 26px;
+  align-items: baseline;
+  font-size: 11px;
+  color: #85858b;
+  margin-top: 12px;
+}
+.run-usage strong {
+  font-size: 18px;
+  font-weight: 500;
+  color: #435f48;
+}
+.run-usage b {
+  font-weight: 500;
+  color: #4e5250;
+}
+.run-usage small {
+  display: block;
+  font-size: 10px;
+  color: #8a8a90;
+}
+.usage-unavailable,
+.usage-note {
+  color: #8a8a90;
+  font-size: 10px;
+  margin: 10px 0 0;
+}
+.run-details {
+  border-top: 1px solid #edf0eb;
+  margin-top: 14px;
+  padding-top: 10px;
+  font-size: 11px;
+}
+.run-details summary {
+  cursor: pointer;
+  color: #8a8a90;
+}
+.run-timeline {
+  padding: 0;
+  margin: 12px 0;
+  list-style: none;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.run-timeline li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 8px;
+  margin: 8px 0;
+  color: #68716b;
+  overflow-wrap: anywhere;
+}
+.run-timeline time {
+  color: #a0a0a5;
+  font-size: 10px;
+  padding-top: 2px;
+}
+.run-id {
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+.run-complete-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #74977b;
+  flex-shrink: 0;
 }
 .pulse-dot {
   width: 6px;
@@ -1386,5 +1501,220 @@ pre {
   * {
     animation: none !important;
     transition: none !important;
+  }
+}
+
+.change-guide {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  gap: 32px;
+  margin: 26px 0 60px;
+}
+.change-guide-nav {
+  align-self: start;
+  position: sticky;
+  top: 28px;
+  max-height: calc(100vh - 56px);
+  overflow-y: auto;
+  border-right: 1px solid var(--rule);
+  padding-right: 16px;
+}
+.change-guide-nav button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  font-size: 12px;
+  padding: 8px 10px;
+  color: #85858b;
+  overflow-wrap: anywhere;
+}
+.change-guide-nav button.selected {
+  color: #487052;
+  background: #f0f5ef;
+}
+.guide-overview-button span {
+  display: block;
+  color: #92979a;
+  font-size: 10px;
+  padding-top: 3px;
+}
+.guide-nav-group {
+  margin-top: 22px;
+}
+.guide-group-label {
+  display: flex;
+  gap: 9px;
+  font-size: 11px;
+  color: #515653;
+  padding: 0 10px 7px;
+}
+.guide-group-label .mono {
+  color: #9ca7a0;
+}
+.change-guide-content {
+  min-width: 0;
+}
+.change-guide-content h2 {
+  font-size: 24px;
+  font-weight: 600;
+  margin: 13px 0 16px;
+  letter-spacing: -0.025em;
+  line-height: 1.45;
+}
+.guide-eyebrow {
+  font-size: 10px;
+  color: #91a193;
+}
+.guide-intro {
+  font-size: 13px;
+  color: #717571;
+  line-height: 1.9;
+  margin: 0 0 28px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.guide-overview-groups {
+  display: grid;
+  gap: 18px;
+}
+.guide-overview-groups article {
+  border: 1px solid #e9ede8;
+  border-radius: 6px;
+  padding: 22px 24px 14px;
+}
+.guide-group-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  color: #87978b;
+  font-size: 10px;
+}
+.guide-overview-groups h3 {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 10px 0;
+}
+.guide-overview-groups p {
+  color: #85858b;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.guide-overview-groups button {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 12px 0;
+  font-size: 12px;
+  background: transparent;
+}
+.guide-overview-groups button span:last-child {
+  color: #88a18d;
+}
+.guide-before-after {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.guide-before-after section {
+  background: #f8f9f7;
+  border: 1px solid #edf0ea;
+  padding: 18px 20px;
+  border-radius: 5px;
+}
+.guide-before-after section:last-child {
+  background: #f4f8f2;
+}
+.guide-before-after h3,
+.guide-detail h3 {
+  font-size: 11px;
+  font-weight: 500;
+  color: #76907b;
+  margin: 0 0 12px;
+}
+.guide-before-after p,
+.guide-detail p,
+.guide-detail li {
+  font-size: 12px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.guide-detail {
+  border-top: 1px solid var(--rule);
+  padding: 22px 0;
+}
+.guide-detail h3 span {
+  font-size: 10px;
+  margin-left: 10px;
+  color: #a1a7a2;
+}
+.guide-detail ul {
+  padding-left: 18px;
+}
+.guide-references {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.guide-references .reference-link {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: left;
+}
+.guide-point-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--rule);
+  padding-top: 18px;
+}
+.guide-point-nav button {
+  font-size: 11px;
+}
+.guide-empty {
+  padding: 36px 0;
+}
+.guide-empty h2 {
+  font-size: 22px;
+  font-weight: 500;
+}
+.guide-empty p {
+  color: #85858b;
+  font-size: 13px;
+  max-width: 540px;
+}
+@media (max-width: 720px) {
+  .change-guide {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .change-guide-nav {
+    position: static;
+    max-height: 220px;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule);
+    padding: 0 0 16px;
+  }
+  .guide-nav-group {
+    margin-top: 12px;
+  }
+  .guide-before-after {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .guide-overview-groups article {
+    padding: 18px 18px 10px;
+  }
+  .change-guide-content h2 {
+    font-size: 22px;
   }
 }

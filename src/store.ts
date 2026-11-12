@@ -1,7 +1,8 @@
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync, writeFileSync, renameSync } from "node:fs";
+import { mkdirSync, writeFileSync, renameSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { AppError } from "./types.js";
+import { tokenCounts } from "./telemetry.js";
 export class Store {
   db: DatabaseSync;
   private artifacts: string;
@@ -16,8 +17,39 @@ export class Store {
       .prepare(
         "SELECT kind,data FROM items WHERE kind IN ('source','explanation')",
       )
-      .all())
-      this.saveArtifact(row.kind as string, JSON.parse(row.data as string));
+      .all()) {
+      const item = JSON.parse(row.data as string);
+      if (row.kind === "explanation" && typeof item.html === "string")
+        this.put("explanation", item);
+      else if (row.kind === "source") this.saveArtifact("source", item);
+    }
+  }
+  private hydrate(kind: string, data: string) {
+    const item = JSON.parse(data);
+    if (kind === "run" && item.usage && !tokenCounts(item.usage)) {
+      delete item.usage;
+      item.usageUnavailableReason =
+        "Recorded usage is incomplete or inconsistent";
+    }
+    if (kind !== "explanation" || typeof item.html === "string") return item;
+    const expected = path.join("explanation", item.id + ".html");
+    if (!/^[a-zA-Z0-9_-]+$/.test(item.id) || item.htmlFile !== expected)
+      throw new AppError(
+        "invalid_artifact",
+        "Invalid explanation artifact path",
+        500,
+      );
+    try {
+      item.html = readFileSync(path.join(this.artifacts, expected), "utf8");
+    } catch {
+      throw new AppError(
+        "artifact_missing",
+        "Explanation HTML file is unavailable",
+        500,
+      );
+    }
+    delete item.htmlFile;
+    return item;
   }
   private saveArtifact(kind: string, item: any) {
     if (kind !== "source" && kind !== "explanation") return;
@@ -42,6 +74,14 @@ export class Store {
     key?: string,
   ) {
     this.saveArtifact(kind, item);
+    let persisted: object = item;
+    if (kind === "explanation") {
+      const { html, ...metadata } = item as T & { html: string };
+      persisted = {
+        ...metadata,
+        htmlFile: path.join("explanation", item.id + ".html"),
+      };
+    }
     this.db
       .prepare(
         "INSERT INTO items(kind,id,review_id,lookup_key,data) VALUES(?,?,?,?,?) ON CONFLICT(kind,id) DO UPDATE SET data=excluded.data,review_id=excluded.review_id",
@@ -51,7 +91,7 @@ export class Store {
         item.id,
         item.reviewId || "",
         key ?? null,
-        JSON.stringify(item),
+        JSON.stringify(persisted),
       );
     return item;
   }
@@ -60,7 +100,7 @@ export class Store {
       .prepare("SELECT data FROM items WHERE kind=? AND id=?")
       .get(kind, id) as { data: string } | undefined;
     if (!row) throw new AppError("not_found", `${kind} not found`, 404);
-    return JSON.parse(row.data);
+    return this.hydrate(kind, row.data);
   }
   maybe<T>(kind: string, id: string): T | undefined {
     try {
@@ -74,7 +114,7 @@ export class Store {
     const row = this.db
       .prepare("SELECT data FROM items WHERE kind=? AND lookup_key=?")
       .get(kind, key) as { data: string } | undefined;
-    return row ? JSON.parse(row.data) : undefined;
+    return row ? this.hydrate(kind, row.data) : undefined;
   }
   list<T>(kind: string, reviewId?: string): T[] {
     const rows =
@@ -87,7 +127,7 @@ export class Store {
               "SELECT data FROM items WHERE kind=? AND review_id=? ORDER BY rowid DESC",
             )
             .all(kind, reviewId);
-    return rows.map((r) => JSON.parse(r.data as string));
+    return rows.map((r) => this.hydrate(kind, r.data as string));
   }
   event(runId: string, data: unknown) {
     const r = this.db

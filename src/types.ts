@@ -91,12 +91,34 @@ export interface Explanation {
   summary: string;
   html: string;
   references: Reference[];
+  guide?: ChangeGuide;
   backend: Backend;
   model: string;
   effort?: string;
   cliVersion: string;
   threadId: string;
   createdAt: string;
+}
+export interface ChangePoint {
+  id: string;
+  title: string;
+  summary: string;
+  before: string;
+  after: string;
+  rationale: string;
+  risks: string[];
+  files: string[];
+  referenceIds: string[];
+}
+export interface ChangeGroup {
+  id: string;
+  title: string;
+  category: string;
+  summary: string;
+  points: ChangePoint[];
+}
+export interface ChangeGuide {
+  groups: ChangeGroup[];
 }
 export interface Run {
   id: string;
@@ -112,6 +134,12 @@ export interface Run {
   connectionRevision?: string;
   cliVersion?: string;
   threadId?: string;
+  turnId?: string;
+  eventSeq?: number;
+  progress?: RunProgress;
+  activity?: RunProgress[];
+  usage?: RunUsage;
+  usageUnavailableReason?: string;
   question?: string;
   context?: Reference;
   explanationId?: string;
@@ -119,6 +147,28 @@ export interface Run {
   error?: string;
   createdAt: string;
   finishedAt?: string;
+}
+export interface RunProgress {
+  stage:
+    "starting" | "investigating" | "thinking" | "generating" | "validating";
+  message: string;
+  at: string;
+  source?: "agent" | "host";
+  outputChars?: number;
+  toolCalls?: number;
+  filesRead?: number;
+}
+export interface TokenCounts {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+  reasoningOutputTokens: number;
+  totalTokens: number;
+}
+export interface RunUsage extends TokenCounts {
+  source: "app-server";
+  scope: "run";
+  updatedAt: string;
 }
 export interface Draft {
   id: string;

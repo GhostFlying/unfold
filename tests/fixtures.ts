@@ -163,6 +163,48 @@ export async function seed(service: FakeService) {
     summary: "Cancelled work exits before a worker is acquired.",
     html: `<h1>A clearer lifecycle for queued work</h1><p>Cancelled work exits before acquiring a worker. This behavior follows the guard in the source.</p><div style="margin:32px 0;padding:24px;background:#f7f9f5"><p style="font-family:monospace;color:#789476">// an illustrative trace, not a test result</p><button id="before" onclick="document.getElementById('trace').textContent='Queue → acquire worker → check cancellation'">Before</button> <button id="after" onclick="document.getElementById('trace').textContent='Queue → check cancellation → return'">After</button><p id="trace" style="font-size:18px">Queue → check cancellation → return</p></div><h2>What changed</h2><p>The cancellation guard is now evaluated before work is acquired. <a data-unfold-ref="${reference.id}">src/queue.ts:2 ↗</a></p><h2>Tradeoffs & unknowns</h2><p>This source inspection does not prove race freedom or runtime behavior. No project tests were executed.</p><h2>Test evidence</h2><p>Source only. This synthetic fixture is for interface validation.</p>`,
     references: [reference],
+    guide: {
+      groups: [
+        {
+          id: "g1",
+          title: "取消语义",
+          category: "行为变更",
+          summary: "先确认任务仍然有效，再进入执行路径。",
+          points: [
+            {
+              id: "g1-c1",
+              title: "把取消检查前移",
+              summary: "已取消任务在获取 worker 前直接返回。",
+              before: "先获取 worker，再检查取消状态。",
+              after: "先检查取消状态，再获取 worker。",
+              rationale: "在资源分配前处理无效任务。",
+              risks: ["源码说明不等同于并发或运行验证。"],
+              files: ["src/queue.ts"],
+              referenceIds: [reference.id],
+            },
+          ],
+        },
+        {
+          id: "g2",
+          title: "资源获取路径",
+          category: "资源管理",
+          summary: "只有有效任务才进入 acquire。",
+          points: [
+            {
+              id: "g2-c1",
+              title: "缩小资源获取范围",
+              summary: "取消路径不再占用 worker。",
+              before: "取消任务仍可能经过 acquire。",
+              after: "acquire 只服务未取消任务。",
+              rationale: "减少取消路径上的无效资源操作。",
+              risks: ["尚未执行项目测试。"],
+              files: ["src/queue.ts"],
+              referenceIds: [reference.id],
+            },
+          ],
+        },
+      ],
+    },
     backend: "traex",
     model: "test-model",
     cliVersion: "test-cli",

@@ -158,6 +158,38 @@ export async function createServer(service: Service, owner: boolean) {
         .map((e) => service.publicExplanation(e)),
     );
   });
+  app.get("/api/v1/reviews/:id/guide", async (req) => {
+    const q = req.query as { explanationId?: string; point?: string };
+    const { review, version, explanation } = service.bundle(
+      param(req, "id"),
+      q.explanationId,
+    );
+    if (!explanation?.guide)
+      throw new AppError(
+        "guide_unavailable",
+        "This explanation has no logical change guide; generate a new explanation to add one",
+        404,
+      );
+    const groups = q.point
+      ? explanation.guide.groups.flatMap((g) => {
+          const points = g.points.filter((p) => p.id === q.point);
+          return points.length ? [{ ...g, points }] : [];
+        })
+      : explanation.guide.groups;
+    if (!groups.length)
+      throw new AppError("not_found", "Change point not found", 404);
+    const ids = new Set(
+      groups.flatMap((g) => g.points.flatMap((p) => p.referenceIds)),
+    );
+    return ok({
+      reviewId: review.id,
+      explanationId: explanation.id,
+      versionId: version.id,
+      summary: explanation.summary,
+      groups,
+      references: explanation.references.filter((r) => ids.has(r.id)),
+    });
+  });
   app.get("/api/v1/reviews/:id/versions", async (req) => {
     const reviewId = param(req, "id");
     service.review(reviewId);
@@ -249,7 +281,7 @@ export async function createServer(service: Service, owner: boolean) {
         req.url.startsWith("/api/v1/") &&
         !req.url.startsWith("/api/v1/login") &&
         !req.url.startsWith("/api/v1/bootstrap") &&
-        !/^\/api\/v1\/reviews\/[^/]+(?:\/(?:source|history|versions|snapshot|share|export))?(?:\?|$)/.test(
+        !/^\/api\/v1\/reviews\/[^/]+(?:\/(?:source|history|versions|snapshot|share|export|guide))?(?:\?|$)/.test(
           req.url,
         )
       )
@@ -511,13 +543,14 @@ export async function createServer(service: Service, owner: boolean) {
         .number()
         .int()
         .nonnegative()
-        .parse((req.query as any).after || 0);
+        .parse(req.headers["last-event-id"] || (req.query as any).after || 0);
       res.hijack();
       res.raw.writeHead(200, {
         "content-type": "text/event-stream",
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       });
+      res.raw.flushHeaders();
       let cursor = after;
       const write = (event: any) => {
         if (event.seq > cursor && !res.raw.destroyed) {
