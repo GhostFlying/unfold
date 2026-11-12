@@ -33,7 +33,7 @@ const modelProfile = z.object({
 const runProfile = z.object({
   backend: backend.optional(),
   model: z.string().trim().min(1).max(200).optional(),
-  effort: z.string().trim().min(1).max(50).optional(),
+  effort: z.string().trim().min(1).max(50).nullable().optional(),
 });
 const side = z.enum(["old", "new"]);
 const bodyText = z.string().trim().min(1).max(100000);

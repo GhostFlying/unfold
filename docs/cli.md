@@ -55,6 +55,10 @@ unfold analyze REVIEW_ID --model MODEL_FROM_CATALOG --effort high --wait
 
 Global defaults are per backend. MR overrides are per backend as well, so switching back restores that backend's overrides. Inheritance resolves at the start of each operation; an in-flight operation keeps its frozen profile. `--model` and `--effort` on `analyze`/`ask` affect only that run. `agent defaults BACKEND --reset` selects the backend's advertised default model and default effort. Unsupported values return a structured error; Unfold never silently downgrades them. Private question sessions are reused only for the same backend, model, effort and source version.
 
+The Web “生成讲解” / “重新讲解” dialog uses these same per-run parameters, without updating global or MR defaults. Changing the model resets the effort control to that model's default and exposes only its advertised efforts. CLI `analyze` and `ask` also accept `--model-default-effort`; it is mutually exclusive with `--effort`. At API level, `effort: null` explicitly selects the model's advertised default, while an omitted effort inherits existing MR/global settings. The resulting run and explanation retain the actual backend/model/effort used.
+
+`import` accepts Codebase MR subpages and nested suffix paths, including checks/job views. It discards view query parameters and fragments, validates the source host and MR number, and stores the canonical MR URL. All subpage forms of one MR reuse its persistent review ID. This is shared by Web and skill imports; URL recognition does not enable the phase-two GitHub provider.
+
 ### Host connector lifecycle
 
 `unfold connector` is the native connector process. Keep one instance per configured Unix socket. For a persistent Linux deployment, adapt `deploy/unfold-connector.service.example`, then use `systemctl --user enable --now unfold-connector`. Restart it after rebuilding the connector software or changing its process environment. Editable CLI installation, authentication, provider, model and effort settings apply automatically without restarting the connector process. Compose runs only the Web/API; the connector remains on the host.

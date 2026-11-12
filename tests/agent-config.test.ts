@@ -5,6 +5,7 @@ import { fixture, seed } from "./fixtures.js";
 import { createServer } from "../src/server.js";
 import { readFileSync } from "node:fs";
 import { loadConfig, saveConfig, secret } from "../src/config.js";
+import type { Run, Review } from "../src/types.js";
 
 test("model metadata controls supported efforts without silent coercion", () => {
   const models = [
@@ -108,6 +109,59 @@ test("global and review profiles inherit, clear independently, and reject unsupp
       (await app.inject(`/api/v1/agents/traex/models`)).statusCode,
       401,
     );
+  } finally {
+    await app.close();
+    f.cleanup();
+  }
+});
+test("per-generation profiles and explicit model-default effort preserve global/MR defaults and previous explanations", async () => {
+  const f = fixture();
+  const { review, explanation } = await seed(f.service);
+  f.service.config.agents.codex = {
+    ...f.service.config.agents.codex,
+    model: "test-model",
+    effort: "high",
+  };
+  const savedReview = f.service.store.get<Review>("review", review.id);
+  savedReview.agentOverrides = {
+    codex: { model: "test-model", effort: "high" },
+  };
+  f.service.store.put("review", savedReview);
+  const originalConfig = structuredClone(f.service.config);
+  const app = await createServer(f.service, true);
+  const headers = {
+    authorization: `Bearer ${secret(f.root, "owner-token")}`,
+    "content-type": "application/json",
+  };
+  try {
+    for (const [effort, expected] of [
+      ["high", "high"],
+      [null, "medium"],
+    ] as const) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/v1/reviews/${review.id}/analyze`,
+        headers,
+        payload: { backend: "codex", model: "test-model", effort },
+      });
+      assert.equal(response.statusCode, 200, response.body);
+      const run = response.json().data as Run;
+      assert.equal(run.backend, "codex");
+      assert.equal(run.model, "test-model");
+      assert.equal(run.effort, expected);
+      await f.service.tasks.get(run.id);
+      assert.deepEqual(f.service.config, originalConfig);
+      assert.deepEqual(f.service.store.get("review", review.id), savedReview);
+      assert.equal(f.service.bundle(review.id).explanation?.id, explanation.id);
+    }
+    const invalid = await app.inject({
+      method: "POST",
+      url: `/api/v1/reviews/${review.id}/analyze`,
+      headers,
+      payload: { backend: "codex", model: "test-model", effort: "ultra" },
+    });
+    assert.equal(invalid.statusCode, 422);
+    assert.equal(invalid.json().error.code, "unsupported_effort");
   } finally {
     await app.close();
     f.cleanup();

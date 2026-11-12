@@ -253,7 +253,7 @@ export class Service {
     options: {
       backend?: Backend;
       model?: string;
-      effort?: string;
+      effort?: string | null;
       question?: string;
       referenceId?: string;
       explanationId?: string;
@@ -287,9 +287,11 @@ export class Service {
         r.agentOverrides?.[backend]?.model ||
         this.config.agents[backend].model,
       effort:
-        options.effort ||
-        r.agentOverrides?.[backend]?.effort ||
-        this.config.agents[backend].effort,
+        options.effort === null
+          ? undefined
+          : options.effort ||
+            r.agentOverrides?.[backend]?.effort ||
+            this.config.agents[backend].effort,
     };
     const profile = await this.rpc<
       ModelProfile & { connectionRevision?: string }

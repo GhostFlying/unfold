@@ -26,12 +26,18 @@ const cli = (args: string[], root: string) =>
 test("CLI keeps subcommand --version distinct and parses errors as stable JSON", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "unfold-cli-"));
   await writeFile(path.join(root, "owner-token"), "synthetic-key");
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
+    let body = "";
+    for await (const chunk of req) body += chunk;
     res.setHeader("content-type", "application/json");
     res.end(
       JSON.stringify({
         ok: true,
-        data: { requestedUrl: req.url, content: "fixed source" },
+        data: {
+          requestedUrl: req.url,
+          content: "fixed source",
+          body: body ? JSON.parse(body) : undefined,
+        },
       }),
     );
   });
@@ -70,6 +76,38 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
       JSON.parse(run.stdout).data.requestedUrl,
       "/api/v1/runs/durable-run",
     );
+    for (const [flag, expected] of [
+      ["--effort", "high"],
+      ["--model-default-effort", null],
+    ] as const) {
+      const generated = await cli(
+        [
+          "--server",
+          `http://127.0.0.1:${port}`,
+          "analyze",
+          "review-id",
+          "--backend",
+          "codex",
+          "--model",
+          "test-model",
+          flag,
+          ...(expected ? [expected] : []),
+        ],
+        root,
+      );
+      assert.equal(generated.exit, 0, generated.stderr);
+      assert.deepEqual(JSON.parse(generated.stdout).data.body, {
+        backend: "codex",
+        model: "test-model",
+        effort: expected,
+      });
+    }
+    const conflict = await cli(
+      ["analyze", "review-id", "--effort", "high", "--model-default-effort"],
+      root,
+    );
+    assert.equal(conflict.exit, 2);
+    assert.equal(JSON.parse(conflict.stderr).error.code, "invalid_input");
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });

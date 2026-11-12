@@ -67,6 +67,49 @@ test("concurrent duplicate imports preserve one review and valid version ownersh
     f.cleanup();
   }
 });
+test("MR subpages and copied query/fragment links normalize to one canonical review", async () => {
+  const f = fixture();
+  try {
+    const variants = [
+      "",
+      "/",
+      "/checks",
+      "/checks/jobs/123",
+      "/activity?to_version=2#discussion",
+      "/changes/src/main.cc",
+      "/any-future-page/nested/path?tab=files#L42",
+    ];
+    for (const suffix of variants)
+      assert.deepEqual(
+        parseTarget(target.url + suffix, f.service.config),
+        target,
+      );
+    const reviews = await Promise.all(
+      variants.map((suffix) => f.service.import(target.url + suffix)),
+    );
+    assert.equal(new Set(reviews.map((r) => r.id)).size, 1);
+    assert.equal(reviews[0].target.url, target.url);
+    assert.equal(f.service.store.list("review").length, 1);
+    assert.equal(
+      parseTarget(
+        "https://github.com/example/repo/pull/42/files?diff=split#L7",
+        f.service.config,
+      ).url,
+      "https://github.com/example/repo/pull/42",
+    );
+    for (const url of [
+      target.url + "invalid/checks",
+      target.url.replace("/42", "/0/checks"),
+      target.url.replace("/42", "/9007199254740992/checks"),
+      "https://evil.example/team/repo/merge_requests/42/checks",
+      "https://github.com/example/repo/pull/0/checks",
+      "https://github.com/example/repo/pull/42invalid/files",
+    ])
+      assert.throws(() => parseTarget(url, f.service.config));
+  } finally {
+    f.cleanup();
+  }
+});
 test("viewer listener has no owner mutations, private routes or native session identifiers", async () => {
   const f = fixture();
   const { review } = await seed(f.service);

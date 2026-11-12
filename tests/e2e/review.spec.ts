@@ -211,6 +211,197 @@ test("MR model and thinking effort overrides use the same persistent API as CLI"
   await page.getByRole("button", { name: "保存 MR 设置", exact: true }).click();
 });
 
+test("copied MR subpage links open the same canonical review in the UI", async ({
+  page,
+}) => {
+  await openOwner(page);
+  const expectedPath = new URL(page.url()).pathname;
+  await page.getByRole("button", { name: "改动记录", exact: true }).click();
+  await page
+    .getByLabel("MR 或 PR 链接")
+    .fill(
+      "https://code.example.test/sample/queue/merge_requests/42/checks/jobs/123?to_version=2#checks",
+    );
+  await page.getByRole("button", { name: "打开 →", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Make cancellation explicit" }),
+  ).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe(expectedPath);
+  await expect(page.locator(".review-breadcrumb a")).toHaveAttribute(
+    "href",
+    "https://code.example.test/sample/queue/merge_requests/42",
+  );
+});
+
+test("regeneration selects a per-run backend/model/effort, retains failures for retry, and leaves defaults unchanged", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await openOwner(page);
+  const reviewId = new URL(page.url()).pathname.split("/")[2];
+  const settingsUrl = `/api/v1/reviews/${reviewId}/agent`;
+  const before = (await (await page.request.get(settingsUrl)).json()).data;
+  const global = (await (await page.request.get("/api/v1/config")).json()).data;
+  await page.route("**/api/v1/agents/codex/models", (route) =>
+    route.fulfill({
+      json: {
+        ok: true,
+        data: {
+          models: [
+            {
+              id: "test-model",
+              model: "test-model",
+              displayName: "Test Model",
+              isDefault: true,
+              defaultEffort: "medium",
+              efforts: [{ effort: "medium" }, { effort: "high" }],
+            },
+            {
+              id: "fast-model",
+              model: "fast-model",
+              displayName: "Fast Model",
+              defaultEffort: "low",
+              efforts: [{ effort: "low" }, { effort: "high" }],
+            },
+          ],
+        },
+      },
+    }),
+  );
+  const submitted: any[] = [];
+  await page.route(`**/api/v1/reviews/${reviewId}/analyze`, async (route) => {
+    submitted.push(route.request().postDataJSON());
+    if (submitted.length === 1)
+      await route.fulfill({
+        status: 422,
+        json: {
+          ok: false,
+          error: {
+            code: "agent_error",
+            message: "Synthetic backend temporarily unavailable",
+          },
+        },
+      });
+    else
+      await route.fulfill({
+        json: {
+          ok: true,
+          data: {
+            id: "synthetic-generation-profile",
+            reviewId,
+            kind: "analysis",
+            state: "succeeded",
+            backend: "codex",
+            model: "fast-model",
+            effort: "high",
+          },
+        },
+      });
+  });
+  await page.getByRole("button", { name: "重新讲解" }).click();
+  const dialog = page.getByRole("dialog", { name: "重新讲解" });
+  await expect(dialog.getByLabel("本次讲解 Agent")).toHaveValue(before.backend);
+  await dialog.getByLabel("本次讲解 Agent").selectOption("codex");
+  await expect(dialog.getByLabel("本次讲解模型")).toBeEnabled();
+  await dialog.getByLabel("本次讲解模型").selectOption("fast-model");
+  await expect(dialog.getByLabel("本次讲解 thinking effort")).toHaveValue("");
+  await expect(dialog.getByLabel("本次讲解 thinking effort")).toContainText(
+    "模型默认 · low",
+  );
+  await expect(
+    dialog
+      .getByLabel("本次讲解 thinking effort")
+      .locator('option[value="medium"]'),
+  ).toHaveCount(0);
+  await dialog.getByLabel("本次讲解 thinking effort").selectOption("high");
+  await page.screenshot({ path: "/tmp/unfold-generation-options-desktop.png" });
+  await dialog.getByRole("button", { name: "开始讲解", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Synthetic backend temporarily unavailable",
+  );
+  await expect(dialog.getByLabel("本次讲解模型")).toHaveValue("fast-model");
+  await expect(dialog.getByLabel("本次讲解 thinking effort")).toHaveValue(
+    "high",
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await expect(
+    dialog.getByRole("button", { name: "开始讲解", exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({ path: "/tmp/unfold-generation-options-mobile.png" });
+  await dialog.getByRole("button", { name: "开始讲解", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(submitted).toEqual([
+    { backend: "codex", model: "fast-model", effort: "high" },
+    { backend: "codex", model: "fast-model", effort: "high" },
+  ]);
+  expect((await (await page.request.get(settingsUrl)).json()).data).toEqual(
+    before,
+  );
+  expect(
+    (await (await page.request.get("/api/v1/config")).json()).data,
+  ).toEqual(global);
+  expect(errors).toEqual([]);
+});
+
+test("model catalog failures are recoverable and model-default effort is an explicit per-run choice", async ({
+  page,
+}) => {
+  await openOwner(page);
+  const reviewId = new URL(page.url()).pathname.split("/")[2];
+  let modelReads = 0;
+  await page.route("**/api/v1/agents/traex/models", async (route) => {
+    modelReads++;
+    if (modelReads === 1)
+      await route.fulfill({
+        status: 503,
+        json: {
+          ok: false,
+          error: {
+            code: "unavailable",
+            message: "Synthetic catalog unavailable",
+          },
+        },
+      });
+    else await route.fallback();
+  });
+  await page.getByRole("button", { name: "重新讲解" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("alert")).toContainText(
+    "Synthetic catalog unavailable",
+  );
+  await expect(dialog.getByRole("button", { name: "开始讲解" })).toBeDisabled();
+  await dialog.getByRole("button", { name: "重新读取模型" }).click();
+  await expect(dialog.getByLabel("本次讲解模型")).toBeEnabled();
+  await dialog.getByLabel("本次讲解 thinking effort").selectOption("");
+  let payload: any;
+  await page.route(`**/api/v1/reviews/${reviewId}/analyze`, async (route) => {
+    payload = route.request().postDataJSON();
+    await route.fulfill({
+      json: {
+        ok: true,
+        data: {
+          id: "synthetic-default-effort",
+          kind: "analysis",
+          state: "succeeded",
+        },
+      },
+    });
+  });
+  await dialog.getByRole("button", { name: "开始讲解" }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(payload).toEqual({
+    backend: "traex",
+    model: "test-model",
+    effort: null,
+  });
+});
+
 test("saving unchanged settings confirms application without a manual connector restart", async ({
   page,
 }) => {

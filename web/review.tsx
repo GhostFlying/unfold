@@ -17,6 +17,7 @@ import { api, nav } from "./api.js";
 import { RunActivity, RunUsage } from "./run-activity.js";
 import { applyRunEvent } from "../src/telemetry.js";
 import { ChangeGuideView } from "./change-guide.js";
+import { GenerationSettings } from "./generation-settings.js";
 
 type Bundle = {
   review: Review;
@@ -56,6 +57,7 @@ export function ReviewPage({
     [general, setGeneral] = useState(false),
     [diffSnapshot, setDiffSnapshot] = useState<Snapshot>();
   const [agentSettings, setAgentSettings] = useState(false);
+  const [generationSettings, setGenerationSettings] = useState(false);
   const iframe = useRef<HTMLIFrameElement>(null),
     [height, setHeight] = useState(700);
   const reload = async () => {
@@ -239,12 +241,7 @@ export function ReviewPage({
                   <button
                     disabled={busy || !!active}
                     className="primary"
-                    onClick={() =>
-                      action(async () => {
-                        await api(`/reviews/${id}/analyze`, "POST", {});
-                        await reload();
-                      })
-                    }
+                    onClick={() => setGenerationSettings(true)}
                   >
                     {active ? "分析中…" : explanation ? "重新讲解" : "生成讲解"}{" "}
                     <span>✳</span>
@@ -944,6 +941,18 @@ export function ReviewPage({
           reviewId={id}
           onClose={() => setAgentSettings(false)}
           onSave={reload}
+        />
+      ) : null}
+      {owner && generationSettings ? (
+        <GenerationSettings
+          reviewId={id}
+          regenerate={!!explanation}
+          onClose={() => setGenerationSettings(false)}
+          onStarted={(run) => {
+            setRuns((current) => [run, ...current]);
+            setGenerationSettings(false);
+            void reload().catch((e) => setError(e.message));
+          }}
         />
       ) : null}
     </>

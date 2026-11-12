@@ -184,6 +184,14 @@ function finishRun(run: Run) {
   else if (run.state !== "succeeded") process.exitCode = 1;
   return run;
 }
+function runEffort(options: any) {
+  if (options.modelDefaultEffort && options.effort)
+    throw new AppError(
+      "invalid_input",
+      "Choose --effort or --model-default-effort",
+    );
+  return options.modelDefaultEffort ? null : options.effort;
+}
 
 program
   .command("init")
@@ -408,13 +416,17 @@ program
   .option("--backend <backend>")
   .option("--model <model>")
   .option("--effort <effort>")
+  .option(
+    "--model-default-effort",
+    "Use this model's advertised default effort",
+  )
   .option("--wait", "Wait for completion or exact approval request")
   .action(
     wrap(async (review, o) => {
       const run = await api(`/reviews/${review}/analyze`, "POST", {
         backend: o.backend,
         model: o.model,
-        effort: o.effort,
+        effort: runEffort(o),
       });
       if (o.wait) await wait(run.id);
       else out(run);
@@ -429,6 +441,10 @@ program
   .option("--backend <backend>")
   .option("--model <model>")
   .option("--effort <effort>")
+  .option(
+    "--model-default-effort",
+    "Use this model's advertised default effort",
+  )
   .option("--wait")
   .action(
     wrap(async (review, o) => {
@@ -438,7 +454,7 @@ program
         explanationId: o.explanation,
         backend: o.backend,
         model: o.model,
-        effort: o.effort,
+        effort: runEffort(o),
       });
       if (o.wait) await wait(run.id);
       else out(run);

@@ -27,8 +27,8 @@ export function parseTarget(value: string, config: Config): Target {
   )
     throw new AppError("invalid_url", "Invalid source URL");
   if (u.hostname === "github.com") {
-    const m = /^\/([^/]+\/[^/]+)\/pull\/(\d+)\/?$/.exec(u.pathname);
-    if (!m)
+    const m = /^\/([^/]+\/[^/]+)\/pull\/(\d+)(?:\/.*)?$/.exec(u.pathname);
+    if (!m || !Number.isSafeInteger(+m[2]) || +m[2] < 1)
       throw new AppError("invalid_url", "Expected a GitHub pull request URL");
     return {
       provider: "github",
@@ -44,10 +44,7 @@ export function parseTarget(value: string, config: Config): Target {
       "Add this company Codebase hostname with unfold config set codebaseHosts before importing",
       403,
     );
-  const m =
-    /^\/(.+)\/merge_requests\/(\d+)(?:\/(?:activity|changes|diff|commits|overview))?\/?$/.exec(
-      u.pathname,
-    );
+  const m = /^\/(.+?)\/merge_requests\/(\d+)(?:\/.*)?$/.exec(u.pathname);
   if (!m || !Number.isSafeInteger(+m[2]) || +m[2] < 1)
     throw new AppError(
       "invalid_url",
