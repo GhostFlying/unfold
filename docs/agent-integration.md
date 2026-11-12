@@ -37,7 +37,19 @@ cp -R /absolute/path/to/unfold/plugins/unfold/skills/unfold-review ~/.agents/ski
 
 运行脚本的机器需要 Node.js 24+ 和已经构建的 Unfold CLI。可将 `unfold` 放到 PATH，或设置 `UNFOLD_CLI` 为 `bin/unfold.mjs` 的绝对路径。执行 `pnpm install --frozen-lockfile && pnpm build` 可以构建本仓库中的 CLI。
 
-远端访问使用已有所有者 API 和受保护的 token 文件，通过脚本的 `--server` / `--token-file` 指定。它们也作为全局参数传给 Unfold CLI。本机部署可以沿用 `UNFOLD_HOME` 指定的现有配置目录；从其他代码仓库运行时，要使用绝对配置路径或显式提供服务地址和 token 文件。
+在调用 Agent 的机器上配置一次已有部署：
+
+```sh
+node /absolute/path/to/unfold-review/scripts/prepare.mts configure \
+  --server OWNER_API_URL --token-file /private/path/to/owner-key \
+  --cli /absolute/path/to/unfold/bin/unfold.mjs
+
+node /absolute/path/to/unfold-review/scripts/prepare.mts check
+```
+
+`configure` 验证原有所有者认证后，才原子保存 `~/.config/unfold/client.json`（或 `$XDG_CONFIG_HOME/unfold/client.json`），权限为 0600。它保存服务地址、CLI 路径和 token 文件引用，token 内容留在原有受保护文件。插件和独立 skill 共用这个文件，切换代码仓库和升级插件后仍然有效。新机器首次接入需要已有管理地址和该机器上的凭据文件。
+
+脚本优先使用显式参数，其次是 `UNFOLD_SERVER` / `UNFOLD_TOKEN_FILE` / `UNFOLD_CLI` 环境变量，再读取私有绑定，最后兼容原有 Unfold home。`--client-config` 或 `UNFOLD_CLIENT_CONFIG` 可指定另一份私有绑定，例如忽略的 `.local/client.json`。配置缺失会返回明确的接入错误。脚本将解析后的地址和 token 文件作为全局参数传给 CLI；直接调用原生 CLI 时，也要使用同一组参数或它自己的 `UNFOLD_HOME` 配置。
 
 这些接入值属于用户环境，保存在原有配置或忽略的 `.local/` 下。公开 skill、插件清单和归档均不包含实际公司入口、Tailscale 地址、token、群标识或登录文件。
 
@@ -54,12 +66,10 @@ skill 默认允许自动选择。希望项目每次提交后都准备讲解时�
 ```sh
 node /absolute/path/to/unfold-review/scripts/prepare.mts \
   'https://code.company.example/team/repo/merge_requests/42' \
-  --head FULL_SUBMITTED_COMMIT \
-  --cli /absolute/path/to/unfold/bin/unfold.mjs \
-  --server OWNER_API_URL --token-file /private/path/to/owner-key
+  --head FULL_SUBMITTED_COMMIT
 ```
 
-可选参数为 `--backend codex|traex`、`--model MODEL`、`--effort EFFORT`、`--regenerate` 和 `--resume RUN`。脚本先刷新远端并核对 head，复用同版本完整讲解或观察/启动分析，最后再次核对 head 与 base。生成失败、待审批、结果未知或远端变化时保留结构化错误，不返回旧讲解作为本次成功结果。等待使用现有 CLI 的 SSE，不靠 Agent 循环查询。
+保存接入后，后续调用只需 MR URL 和提交。可选参数为 `--backend codex|traex`、`--model MODEL`、`--effort EFFORT`、`--regenerate` 和 `--resume RUN`。脚本先刷新远端并核对 head，复用同版本完整讲解或观察/启动分析，最后再次核对 head 与 base。生成失败、待审批、结果未知或远端变化时保留结构化错误，不返回旧讲解作为本次成功结果。等待使用现有 CLI 的 SSE，不靠 Agent 循环查询。
 
 成功时 stdout 返回一个 JSON 对象，主要字段如下：
 

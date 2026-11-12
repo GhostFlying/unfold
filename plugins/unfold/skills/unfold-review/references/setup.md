@@ -4,14 +4,24 @@
 
 Unfold 源码和安装说明见 [GhostFlying/unfold](https://github.com/GhostFlying/unfold)。在当前机器安装并构建 CLI 后，可将 `UNFOLD_CLI` 设置为 checkout 中 `bin/unfold.mjs` 的绝对路径，或将 `unfold` 放到 PATH。服务配置、登录凭据和已部署的入口继续保存在原位置。脚本也支持 `--cli /absolute/path/to/bin/unfold.mjs`。
 
-远端所有者 API 使用：
+首次在调用 Agent 的机器上保存服务接入：
 
 ```sh
-node /ABSOLUTE/SKILL/DIRECTORY/scripts/prepare.mts MR_URL \
-  --head FULL_SUBMITTED_COMMIT \
+node /ABSOLUTE/SKILL/DIRECTORY/scripts/prepare.mts configure \
   --cli /absolute/path/to/unfold/bin/unfold.mjs \
   --server OWNER_API_URL --token-file /private/path/to/owner-key
+
+node /ABSOLUTE/SKILL/DIRECTORY/scripts/prepare.mts check
+
+node /ABSOLUTE/SKILL/DIRECTORY/scripts/prepare.mts MR_URL \
+  --head FULL_SUBMITTED_COMMIT
 ```
+
+`configure` 先通过原有认证读取所有者 API，成功后才保存到 `~/.config/unfold/client.json`（文件权限 0600）。支持 `XDG_CONFIG_HOME`。文件只存 API 地址、CLI 绝对路径和 token 文件的绝对路径，token 内容继续留在原受保护文件中。插件和独立 skill 读取同一份绑定；代码仓库切换与插件升级不影响它。每台调用机器需要接入一次；网络访问仍需该机器能到达管理入口。
+
+优先级为显式 `--server` / `--token-file` / `--cli`、环境变量 `UNFOLD_SERVER` / `UNFOLD_TOKEN_FILE` / `UNFOLD_CLI`、已保存绑定、已有 Unfold home 配置。`--client-config /absolute/private/client.json` 或 `UNFOLD_CLIENT_CONFIG` 可以指定另一份私有文件，例如忽略的 `.local/client.json`。缺少接入时返回 `client_not_configured`，不会猜测当前机器就是部署主机。
+
+`check` 返回认证状态和接入引用，不输出 token 内容。直接使用原生 Unfold CLI 查询或审批时，继续传入这些 `--server` / `--token-file` 参数；该绑定由 skill 脚本读取。CLI 的原有 `UNFOLD_HOME` 配置仍可使用。
 
 所有者可以通过 Tailscale 连接管理入口。转发地址必须来自独立配置的公司只读入口。脚本会在不附带所有者认证的情况下检查 viewer 健康和指定版本的公开讲解。
 

@@ -10,7 +10,7 @@ description: 在代码修改已提交或更新 PR/MR 后，用 Unfold 准备对�
 ## 准备讲解
 
 1. 完成用户要求的代码修改和 PR/MR 提交或更新。从原平台确认实际 URL 和完整 head 提交；公司平台优先用 `bytedcli`。沿用当前仓库的提交约定。
-2. 确认运行环境有 Node.js 24+ 和已配置的 Unfold CLI 访问。`UNFOLD_CLI` 可指向 Unfold 的绝对可执行路径；远端接入用 `--server` 和本机受保护的 `--token-file`。接入信息放在用户原有配置或忽略的 `.local/` 中。安装说明见 [接入与恢复](references/setup.md)。
+2. 确认运行环境有 Node.js 24+ 和 Unfold CLI。先用本 skill 的 `scripts/prepare.mts check` 检查接入；脚本从用户私有的 `~/.config/unfold/client.json` 读取已部署的所有者 API、CLI 和 token 文件引用，跨代码仓库、插件更新继续使用。首次接入用 `configure --server OWNER_API_URL --token-file PRIVATE_KEY_FILE --cli UNFOLD_EXECUTABLE` 保存并验证。真实地址和凭据留在本机。路径覆盖、已有配置和恢复操作见 [接入与恢复](references/setup.md)。
 3. 按本 skill 所在目录解析脚本的绝对路径，执行：
 
    ```sh
@@ -20,7 +20,7 @@ description: 在代码修改已提交或更新 PR/MR 后，用 Unfold 准备对�
    ```
 
    按任务需要传入 `--backend codex|traex`、`--model MODEL`、`--effort EFFORT`。默认复用同一版本的完整讲解；用户要求重新生成时加 `--regenerate`。新生成的讲解包含整体交互讲解和按逻辑组织的改动导览。
-4. 脚本通过已有事件流等待，并在 stderr 提供运行 ID。进程仍在运行时，用当前终端工具等待；查询状态用 `unfold --json run RUN`。执行审批返回退出码 3，保留请求，按原有精确审批流程处理后，用相同 URL/head 和 `--resume RUN` 继续。只读调查通常不需要执行代码。
+4. 脚本通过已有事件流等待，并在 stderr 提供运行 ID。进程仍在运行时，用当前终端工具等待；中断后以相同 URL/head 和 `--resume RUN` 恢复。直接调用 Unfold CLI 查询运行或处理审批时，使用 `check` 返回的同一 CLI、`--server` 和 `--token-file`。执行审批返回退出码 3，保留请求，按原有精确审批流程处理后继续原运行。只读调查通常不需要执行代码。
 5. 仅在退出码为 0 且结果 `ok: true`、`data.status: ready` 时，交付 `data.url`、`data.head` 和 `data.message`。该 URL 固定到本次讲解版本。分析失败、版本变化、分享入口不可读或认证失效时，准确报告状态和可恢复 ID。不要将旧讲解标记为本次成功，不自动切后端或重跑失败请求。
 
 当前提供者支持 Codebase MR。GitHub PR 接入属于第二阶段；遇到未支持的提供者，报告工具返回的能力限制，保留已完成的代码与 PR。

@@ -3,6 +3,18 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
+import {
+  readFileSync,
+  writeFileSync,
+  mkdirSync,
+  renameSync,
+  rmSync,
+  statSync,
+  existsSync,
+} from "node:fs";
+import path from "node:path";
+import os from "node:os";
+import { randomUUID } from "node:crypto";
 
 export interface PrepareOptions {
   url: string;
@@ -15,6 +27,7 @@ export interface PrepareOptions {
   effort?: string;
   resume?: string;
   regenerate?: boolean;
+  clientConfig?: string;
 }
 type Invoke = (args: string[]) => Promise<any>;
 type Progress = (event: Record<string, unknown>) => void;
@@ -28,6 +41,181 @@ export class PrepareError extends Error {
     this.details = details;
     this.exit = exit;
   }
+}
+
+export function clientConfigPath(
+  options: PrepareOptions,
+  env = process.env,
+  home = os.homedir(),
+) {
+  return path.resolve(
+    options.clientConfig ||
+      env.UNFOLD_CLIENT_CONFIG ||
+      path.join(
+        env.XDG_CONFIG_HOME || path.join(home, ".config"),
+        "unfold",
+        "client.json",
+      ),
+  );
+}
+
+export function resolveClientOptions(
+  options: PrepareOptions,
+  env = process.env,
+  home = os.homedir(),
+): PrepareOptions {
+  const file = clientConfigPath(options, env, home);
+  let saved: Record<string, string> = {};
+  try {
+    const value = JSON.parse(readFileSync(file, "utf8"));
+    if (
+      value?.version !== 1 ||
+      !["server", "tokenFile", "cli"].every(
+        (key) =>
+          value[key] === undefined ||
+          (typeof value[key] === "string" && value[key].trim()),
+      ) ||
+      Object.keys(value).some(
+        (key) => !["version", "server", "tokenFile", "cli"].includes(key),
+      )
+    )
+      throw Error("Expected version 1 and server/tokenFile/cli references");
+    if (
+      (value.tokenFile && !path.isAbsolute(value.tokenFile)) ||
+      (value.cli &&
+        /[/\\]|\.[cm]?[jt]s$/.test(value.cli) &&
+        !path.isAbsolute(value.cli))
+    )
+      throw Error("Stored filesystem references must be absolute");
+    saved = value;
+  } catch (error: any) {
+    if (error.code !== "ENOENT")
+      throw new PrepareError(
+        "invalid_client_config",
+        "Cannot read the private Unfold client binding",
+        2,
+        { clientConfig: file, reason: error.message },
+      );
+  }
+  const legacyRoot = path.resolve(env.UNFOLD_HOME || ".local");
+  const legacyFile = path.join(legacyRoot, "config.json");
+  let server = options.server || env.UNFOLD_SERVER || saved.server;
+  let tokenFile = options.tokenFile || env.UNFOLD_TOKEN_FILE || saved.tokenFile;
+  if (!server && existsSync(legacyFile)) {
+    try {
+      server = JSON.parse(readFileSync(legacyFile, "utf8")).ownerBaseUrl;
+    } catch {
+      throw new PrepareError(
+        "invalid_client_config",
+        "Cannot read the existing Unfold home configuration",
+        2,
+      );
+    }
+  }
+  if (!tokenFile && existsSync(path.join(legacyRoot, "owner-token")))
+    tokenFile = path.join(legacyRoot, "owner-token");
+  if (!server || !tokenFile)
+    throw new PrepareError(
+      "client_not_configured",
+      "Run prepare.mts configure --server OWNER_API_URL --token-file PRIVATE_KEY_FILE [--cli UNFOLD_EXECUTABLE] once on this machine",
+      2,
+      { clientConfig: file },
+    );
+  let address: URL;
+  try {
+    address = new URL(server);
+  } catch {
+    throw new PrepareError(
+      "invalid_client_config",
+      "Owner API address must be a full HTTP(S) URL",
+      2,
+    );
+  }
+  if (
+    !/^https?:$/.test(address.protocol) ||
+    address.username ||
+    address.password ||
+    address.search ||
+    address.hash
+  )
+    throw new PrepareError(
+      "invalid_client_config",
+      "Owner API address must not contain credentials, query parameters or fragments",
+      2,
+    );
+  const cli = options.cli || env.UNFOLD_CLI || saved.cli || "unfold";
+  return {
+    ...options,
+    clientConfig: file,
+    server: address.href.replace(/\/$/, ""),
+    tokenFile: path.resolve(tokenFile),
+    cli: /[/\\]|\.[cm]?[jt]s$/.test(cli) ? path.resolve(cli) : cli,
+  };
+}
+
+export async function checkClient(
+  options: PrepareOptions,
+  invoke = cliInvoker(options),
+) {
+  if (!Array.isArray(await invoke(["list"])))
+    throw new PrepareError(
+      "invalid_response",
+      "Owner API did not return the authenticated review list",
+    );
+  return {
+    configured: true,
+    authenticated: true,
+    clientConfig: options.clientConfig,
+    server: options.server,
+    cli: options.cli,
+    tokenFile: options.tokenFile,
+  };
+}
+
+export async function configureClient(
+  options: PrepareOptions,
+  invoke = cliInvoker(options),
+) {
+  let token: ReturnType<typeof statSync>;
+  try {
+    token = statSync(options.tokenFile!);
+  } catch {
+    throw new PrepareError(
+      "authentication_required",
+      "The existing owner key file is unavailable",
+      6,
+    );
+  }
+  if (!token.isFile() || !token.size || token.mode & 0o077)
+    throw new PrepareError(
+      "authentication_required",
+      "Use a nonempty protected owner key file (mode 0600)",
+      6,
+    );
+  const result = await checkClient(options, invoke);
+  const file = options.clientConfig!;
+  mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(
+      temporary,
+      JSON.stringify(
+        {
+          version: 1,
+          server: options.server,
+          tokenFile: options.tokenFile,
+          cli: options.cli,
+        },
+        null,
+        2,
+      ) + "\n",
+      { mode: 0o600, flag: "wx" },
+    );
+    renameSync(temporary, file);
+  } finally {
+    rmSync(temporary, { force: true });
+  }
+  return { ...result, saved: true };
 }
 
 const execute = promisify(execFile);
@@ -372,6 +560,7 @@ async function main() {
       cli: { type: "string" },
       server: { type: "string" },
       "token-file": { type: "string" },
+      "client-config": { type: "string" },
       backend: { type: "string" },
       model: { type: "string" },
       effort: { type: "string" },
@@ -382,7 +571,7 @@ async function main() {
   });
   if (values.help) {
     console.log(
-      "Usage: node prepare.mts MR_URL --head FULL_SUBMITTED_COMMIT [--cli PATH] [--server URL] [--token-file PATH] [--backend codex|traex] [--model MODEL] [--effort EFFORT] [--resume RUN] [--regenerate]\nReturns one JSON result; progress and failures go to stderr. Requires Node.js 24+ and configured Unfold CLI access.",
+      "Usage: node prepare.mts configure --server OWNER_API_URL --token-file PRIVATE_KEY_FILE [--cli PATH]\n       node prepare.mts check [--client-config FILE]\n       node prepare.mts MR_URL --head FULL_SUBMITTED_COMMIT [--cli PATH] [--server URL] [--token-file PATH] [--client-config FILE] [--backend codex|traex] [--model MODEL] [--effort EFFORT] [--resume RUN] [--regenerate]\nReturns one JSON result; progress and failures go to stderr. Requires Node.js 24+. Configuration precedence: explicit options, UNFOLD_* environment, private client binding, existing Unfold home.",
     );
     return;
   }
@@ -392,13 +581,30 @@ async function main() {
       "Provide one submitted MR/PR URL; use --help for options",
       2,
     );
+  const input: PrepareOptions = {
+    ...values,
+    url: positionals[0],
+    head: values.head || "",
+    tokenFile: values["token-file"],
+    clientConfig: values["client-config"],
+  };
+  if (["configure", "check"].includes(input.url)) {
+    const resolved = resolveClientOptions(input);
+    const result =
+      input.url === "configure"
+        ? await configureClient(resolved)
+        : await checkClient(resolved);
+    console.log(JSON.stringify({ ok: true, data: result }));
+    return;
+  }
+  if (!/^(?:[\da-f]{40}|[\da-f]{64})$/i.test(input.head))
+    throw new PrepareError(
+      "invalid_input",
+      "--head must be the full submitted commit",
+      2,
+    );
   const result = await prepareReview(
-    {
-      ...values,
-      url: positionals[0],
-      head: values.head || "",
-      tokenFile: values["token-file"],
-    },
+    resolveClientOptions(input),
     undefined,
     undefined,
     (event) => process.stderr.write(JSON.stringify(event) + "\n"),
