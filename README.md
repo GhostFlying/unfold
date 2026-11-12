@@ -1,0 +1,114 @@
+# Unfold
+
+Understand a change before reviewing it.
+
+Unfold reads an MR's actual source at a fixed commit, asks an existing TraeX or Codex app-server to explain its design and behavior, and presents a self-contained interactive walkthrough next to the diff. Questions stay private. Comments become editable drafts and go back to the original MR only after an explicit preview and confirmation.
+
+This is a **single-owner, CLI-first tool**. Every product operation uses the same API from the command line and the web UI. Readers can open a stable company-network URL without an account. They cannot invoke the agent, inspect private conversations, approve execution, or publish comments.
+
+## Run locally
+
+Requires Node.js 24+, pnpm 11, the owner's authenticated native CLIs, and Linux with bwrap for approved project execution. Docker Compose runs the web/API; a small host connector reuses existing authentication without packaging proprietary tooling or mounting it into the web container.
+
+```sh
+pnpm install
+pnpm build
+pnpm unfold init --codebase-host code.company.example
+
+# Terminal 1: native connector. Keep this running on the host.
+pnpm connector
+
+# Terminal 2: owner and read-only HTTP listeners.
+pnpm dev
+
+# Or run the web/API in Compose instead of `pnpm dev`:
+cp .env.example .env
+# Set UNFOLD_UID/GID to `id -u` / `id -g` in .env.
+docker compose up --build -d
+```
+
+Open the owner entry at `http://127.0.0.1:18371`. Retrieve the owner key deliberately with `pnpm unfold auth token`, and enter it into the sign-in form. The browser uses an HttpOnly, SameSite session cookie; the CLI reads the protected owner-key file. Do not put keys in URLs.
+
+All runtime material is under ignored `.local/`: configuration, SQLite, generated HTML, source snapshots, investigation notes, dedicated agent homes, and receipts. It is excluded from Git **and Docker build contexts**. Original CLI credentials remain in their original stores; dedicated backend homes reuse only their authentication files. Neither proprietary CLI implementations nor their complete internal protocols are distributed here.
+
+## Codebase first
+
+```sh
+pnpm unfold --json import https://code.company.example/team/repo/merge_requests/42
+pnpm unfold --json show REVIEW_ID
+pnpm unfold --json analyze REVIEW_ID --backend traex --wait
+pnpm unfold --json ask REVIEW_ID --body 'Why does cancellation happen here?' --wait
+pnpm unfold --json history REVIEW_ID
+pnpm unfold export REVIEW_ID --output /tmp/explanation.html
+```
+
+The fixed review ID identifies the source instance, repository and MR number. Re-importing opens the same review. Each successful explanation retains its immutable commit range. New commits mark older explanations stale; a failed regeneration keeps the last successful explanation readable.
+
+Choose the global default in Settings or with `unfold config set defaultBackend '"codex"'`. `unfold backend REVIEW_ID codex` changes that review's default. Use `unfold agent models traex` or `unfold agent models codex` to list actual models and supported thinking efforts. `unfold agent defaults BACKEND --model MODEL --effort high` changes global defaults; `unfold agent set REVIEW_ID --backend BACKEND --model MODEL --effort medium` adds review overrides. Both are also available in Settings and the review’s Agent settings. `--inherit-model`, `--inherit-effort`, and `unfold backend REVIEW_ID inherit` restore inheritance. Run-level `--model` / `--effort` flags affect only that operation. A run's backend/model/effort/version are recorded; there is no silent fallback. Private questions use a persistent backend-specific conversation and carry the selected version and context.
+
+GitHub PR ingestion is reserved for phase two. Creating or using this public source repository does not enable the GitHub provider.
+
+## Comment deliberately
+
+```sh
+pnpm unfold --json reference REVIEW_ID src/example.ts --version VERSION_ID --start 42
+pnpm unfold --json draft create REVIEW_ID --reference REFERENCE_ID --body-file comment.md
+pnpm unfold --json draft preview DRAFT_ID
+pnpm unfold --json draft publish DRAFT_ID --confirm EXACT_PREVIEW_DIGEST
+pnpm unfold --json refresh REVIEW_ID
+```
+
+Omit `--reference` for a general comment. Native inline comments require a location in the selected diff and are pinned to its base/head. A changed revision or edited draft invalidates the preview. A general comment is an explicit choice, never a silent fallback to a new line number. `draft edit --general` explicitly relocates an editable draft to the latest version as a general comment.
+
+Each comment contains the owner's text, revision and relevant source location. The explanation URL is supplementary. A transport timeout is **unknown**, not a failure that can safely be retried: `draft reconcile DRAFT_ID` reads the original platform for the persisted publication marker. Original-platform drafts are never batch-published.
+
+## Read-only sharing and Tailscale
+
+Set `shareBaseUrl` to a company-network HTTP(S) entry and bind the read-only host port to the corresponding interface. For Compose, use `UNFOLD_SHARE_BIND` in `.env`. Then `unfold share REVIEW_ID` returns the stable URL; `--explanation EXPLANATION_ID` selects a historical walkthrough.
+
+The share listener registers only public read routes. Private questions, drafts, agent sessions and execution receipts are unavailable there, even with an owner credential. Source access is limited to evidence included in a published explanation. No account/team/role system is involved.
+
+Tailscale is **owner access only**, independently configured on the host:
+
+```sh
+tailscale serve --bg --https=18371 http://127.0.0.1:18371
+```
+
+Do not enable Funnel. Tailscale and localhost URLs are rejected as share-base addresses. Use `--server OWNER_URL` for a remote CLI; company sharing never falls back to that URL.
+
+## Execution boundary
+
+The agent receives version-bound source tools. Native shell/unified execution, inherited hooks/plugins/MCP, automatic web search and environment access are disabled. The app-server's code-mode dispatcher remains enabled because it routes the restricted host functions; it is not permission to execute reviewed code.
+
+Running a test, build, dependency installer or repository script requires approval of an exact request containing command, revision, working directory, purpose, side effects, network access and timeout. `unfold approval list` displays requests. `approval approve ID --confirm DIGEST` grants that operation once; `approval deny` declines it. A credential-free disposable work copy executes through bwrap, with networking off unless explicitly requested and approved. The original checkout is never mounted writable. No commit, push, approve, merge or resolve-discussion operations are exposed.
+
+Generated HTML runs in an opaque-origin `sandbox="allow-scripts"` iframe with a restrictive CSP, no remote resources and a parent navigation policy. Its only bridge selects a verified code reference or a bounded text quote in the host. It cannot invoke the agent, approve execution, or publish a comment. Exported HTML retains the sandbox wrapper.
+
+## CLI and development
+
+See [the CLI reference](docs/cli.md) for commands, JSON output, event waiting and exit codes. `--body-file -` accepts stdin. `--wait` stops at a terminal result or pending approval, with an operation ID that can be resumed using `watch` after a decision. Waiting uses an event stream, not model-driven polling.
+
+```sh
+pnpm check
+pnpm test:e2e
+```
+
+Tests use synthetic source and platform responses. They do not count as real backend generation, real platform writeback, or company-network visitor proof. Live investigation and acceptance receipts belong in `.local/`; report these categories separately.
+
+## 参考与致谢 · References & acknowledgements
+
+- [antfu/pulls.review](https://github.com/antfu/pulls.review): logical grouping of changes, reviewer-oriented reading, and the restrained source-reading interface that inspired Unfold's visual direction.
+- [cursor/plugins — PR Review Canvas](https://github.com/cursor/plugins/tree/main/pr-review-canvas): explanations organized around core behavior, execution paths, concrete before/after examples, and review risks.
+- [nicobailon/visual-explainer](https://github.com/nicobailon/visual-explainer): expressive, self-contained technical explanations using HTML, diagrams and useful interaction.
+
+Thank you to their authors and contributors. These projects informed the approach; Unfold does not bundle their platforms or agent frameworks. The initial implementation is original code rather than copied renderer or application code. Any future code reuse must retain its upstream license and attribution.
+
+Unfold is available under the [MIT license](LICENSE).
+
+## Interface preview
+
+The screenshots below use synthetic source and test data only.
+
+![Reading an interactive explanation](docs/assets/reader.png)
+
+![Per-review model and thinking effort settings](docs/assets/agent-settings.png)

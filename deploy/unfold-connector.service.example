@@ -1,0 +1,21 @@
+# Install as ~/.config/systemd/user/unfold-connector.service after replacing paths.
+# The host connector needs the owner's CLI authentication and Linux bwrap.
+[Unit]
+Description=Unfold native connector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Optional network proxy/certificate variables only; keep this file ignored and private.
+EnvironmentFile=-/absolute/path/to/unfold/.local/connector.env
+WorkingDirectory=/absolute/path/to/unfold
+Environment=UNFOLD_HOME=/absolute/path/to/unfold/.local
+Environment=PATH=/path/to/node/bin:/path/to/native/clis:/usr/local/bin:/usr/bin:/bin
+ExecStart=/path/to/node/bin/node /absolute/path/to/unfold/bin/unfold.mjs connector
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=default.target

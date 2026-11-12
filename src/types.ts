@@ -1,0 +1,173 @@
+export type Backend = "traex" | "codex";
+export interface ModelProfile {
+  model?: string;
+  effort?: string;
+}
+export interface AgentModel {
+  id: string;
+  model: string;
+  displayName: string;
+  isDefault?: boolean;
+  defaultEffort?: string;
+  efforts: { effort: string; description: string }[];
+}
+export type Side = "old" | "new";
+export interface Target {
+  provider: "codebase" | "github";
+  host: string;
+  repo: string;
+  number: number;
+  url: string;
+}
+export interface FileDiff {
+  path: string;
+  oldPath: string;
+  patch: string;
+  binary: boolean;
+  truncated: boolean;
+  added: number;
+  deleted: number;
+}
+export interface Comment {
+  id: string;
+  body: string;
+  author: string;
+  threadId?: string;
+  path?: string;
+  side?: Side;
+  line?: number;
+  outdated?: boolean;
+  url?: string;
+}
+export interface Snapshot {
+  id: string;
+  target: Target;
+  title: string;
+  description: string;
+  head: string;
+  base: string;
+  remoteVersion: string;
+  repoId: string;
+  mrId: string;
+  files: FileDiff[];
+  comments: Comment[];
+  fetchedAt: string;
+}
+export interface Review {
+  id: string;
+  identity: string;
+  target: Target;
+  title: string;
+  backend: Backend;
+  backendOverride?: Backend;
+  agentOverrides?: Partial<Record<Backend, ModelProfile>>;
+  versionId: string;
+  explanationId?: string;
+  createdAt: string;
+}
+export interface Source {
+  id: string;
+  versionId: string;
+  path: string;
+  side: Side;
+  commit: string;
+  content: string;
+}
+export interface Reference {
+  id: string;
+  path: string;
+  side: Side;
+  start: number;
+  end: number;
+  commit: string;
+  sourceId: string;
+  versionId?: string;
+}
+export interface Explanation {
+  id: string;
+  reviewId: string;
+  versionId: string;
+  title: string;
+  summary: string;
+  html: string;
+  references: Reference[];
+  backend: Backend;
+  model: string;
+  effort?: string;
+  cliVersion: string;
+  threadId: string;
+  createdAt: string;
+}
+export interface Run {
+  id: string;
+  reviewId: string;
+  versionId: string;
+  kind: "analysis" | "question";
+  state:
+    "running" | "awaiting_approval" | "succeeded" | "failed" | "interrupted";
+  backend: Backend;
+  model?: string;
+  effort?: string;
+  requestedProfile?: ModelProfile;
+  cliVersion?: string;
+  threadId?: string;
+  question?: string;
+  context?: Reference;
+  explanationId?: string;
+  answer?: string;
+  error?: string;
+  createdAt: string;
+  finishedAt?: string;
+}
+export interface Draft {
+  id: string;
+  reviewId: string;
+  versionId: string;
+  body: string;
+  anchor?: Reference;
+  state: "draft" | "publishing" | "published" | "unknown";
+  revision: number;
+  publicationId?: string;
+  remoteId?: string;
+  error?: string;
+  createdAt: string;
+}
+export interface ExecutionRequest {
+  command: string;
+  cwd: string;
+  purpose: string;
+  sideEffects: string;
+  network: boolean;
+  timeoutSeconds: number;
+}
+export interface Approval {
+  id: string;
+  runId: string;
+  reviewId: string;
+  versionId: string;
+  request: ExecutionRequest;
+  digest: string;
+  state: "pending" | "approved" | "denied" | "finished" | "interrupted";
+  error?: string;
+  receipt?: {
+    exitCode: number | null;
+    stdout: string;
+    stderr: string;
+    timedOut: boolean;
+  };
+  createdAt: string;
+}
+export interface AgentEvent {
+  type: string;
+  [key: string]: unknown;
+}
+export class AppError extends Error {
+  constructor(
+    public code: string,
+    message: string,
+    public status = 400,
+    public details?: unknown,
+  ) {
+    super(message);
+  }
+}

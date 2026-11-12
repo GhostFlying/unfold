@@ -1,0 +1,18 @@
+services:
+  unfold:
+    build: .
+    init: true
+    restart: unless-stopped
+    user: "${UNFOLD_UID:-1000}:${UNFOLD_GID:-1000}"
+    ports:
+      - "127.0.0.1:${UNFOLD_OWNER_PORT:-18371}:8081"
+      - "${UNFOLD_SHARE_BIND:-127.0.0.1}:${UNFOLD_SHARE_PORT:-18370}:8080"
+    volumes:
+      - ./.local:/state
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
