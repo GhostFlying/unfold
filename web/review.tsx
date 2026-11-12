@@ -12,12 +12,11 @@ import type {
 } from "../src/types.js";
 import { diffLines } from "../src/diff.js";
 import { frameHtml } from "../src/html.js";
-import { ReviewAgentSettings } from "./agent-settings.js";
 import { api, nav } from "./api.js";
 import { RunActivity, RunUsage } from "./run-activity.js";
 import { applyRunEvent } from "../src/telemetry.js";
 import { ChangeGuideView } from "./change-guide.js";
-import { GenerationSettings } from "./generation-settings.js";
+import { ReviewAgentControls } from "./review-agent-controls.js";
 
 type Bundle = {
   review: Review;
@@ -31,11 +30,13 @@ export function ReviewPage({
   id,
   explanationId,
   owner,
+  settingsRevision,
   onChange,
 }: {
   id: string;
   explanationId?: string;
   owner: boolean;
+  settingsRevision: number;
   onChange: () => Promise<void>;
 }) {
   const [bundle, setBundle] = useState<Bundle>(),
@@ -56,8 +57,7 @@ export function ReviewPage({
     [preview, setPreview] = useState<any>(),
     [general, setGeneral] = useState(false),
     [diffSnapshot, setDiffSnapshot] = useState<Snapshot>();
-  const [agentSettings, setAgentSettings] = useState(false);
-  const [generationSettings, setGenerationSettings] = useState(false);
+  const [agentPending, setAgentPending] = useState(true);
   const iframe = useRef<HTMLIFrameElement>(null),
     [height, setHeight] = useState(700);
   const reload = async () => {
@@ -239,14 +239,6 @@ export function ReviewPage({
               {owner ? (
                 <>
                   <button
-                    disabled={busy || !!active}
-                    className="primary"
-                    onClick={() => setGenerationSettings(true)}
-                  >
-                    {active ? "分析中…" : explanation ? "重新讲解" : "生成讲解"}{" "}
-                    <span>✳</span>
-                  </button>
-                  <button
                     className="quiet"
                     title="手动刷新 MR"
                     disabled={busy}
@@ -291,15 +283,6 @@ export function ReviewPage({
             <span className="del">
               −{version.files.reduce((s, f) => s + f.deleted, 0)}
             </span>
-            {owner ? (
-              <button
-                className="quiet"
-                onClick={() => setAgentSettings(true)}
-                aria-label="当前 MR 的 Agent 设置"
-              >
-                {review.backend} · Agent 设置
-              </button>
-            ) : null}
             {explanation ? (
               <span className="subtle">
                 讲解 · {explanation.backend} ·{" "}
@@ -307,6 +290,26 @@ export function ReviewPage({
               </span>
             ) : null}
           </div>
+          {owner ? (
+            <ReviewAgentControls
+              key={`${id}:${settingsRevision}`}
+              reviewId={id}
+              regenerate={!!explanation}
+              disabled={busy}
+              active={!!active}
+              onPendingChange={setAgentPending}
+              onSaved={(updated) => {
+                setBundle((current) =>
+                  current ? { ...current, review: updated } : current,
+                );
+                void onChange().catch((e) => setError(e.message));
+              }}
+              onStarted={(run) => {
+                setRuns((current) => [run, ...current]);
+                void reload().catch((e) => setError(e.message));
+              }}
+            />
+          ) : null}
           <nav className="reader-tabs" aria-label="改动内容">
             {[
               ["guide", "改动导览"],
@@ -702,6 +705,7 @@ export function ReviewPage({
                   className="composer"
                   onSubmit={(e) => {
                     e.preventDefault();
+                    if (busy || active || agentPending) return;
                     void action(async () => {
                       await api(`/reviews/${id}/questions`, "POST", {
                         question: contextBody(),
@@ -722,7 +726,10 @@ export function ReviewPage({
                   />
                   <div>
                     <span className="hint">私有追问</span>
-                    <button className="primary" disabled={busy || !!active}>
+                    <button
+                      className="primary"
+                      disabled={busy || !!active || agentPending}
+                    >
                       发送 ↑
                     </button>
                   </div>
@@ -935,25 +942,6 @@ export function ReviewPage({
             </footer>
           </section>
         </div>
-      ) : null}
-      {owner && agentSettings ? (
-        <ReviewAgentSettings
-          reviewId={id}
-          onClose={() => setAgentSettings(false)}
-          onSave={reload}
-        />
-      ) : null}
-      {owner && generationSettings ? (
-        <GenerationSettings
-          reviewId={id}
-          regenerate={!!explanation}
-          onClose={() => setGenerationSettings(false)}
-          onStarted={(run) => {
-            setRuns((current) => [run, ...current]);
-            setGenerationSettings(false);
-            void reload().catch((e) => setError(e.message));
-          }}
-        />
       ) : null}
     </>
   );

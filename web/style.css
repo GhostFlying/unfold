@@ -464,6 +464,61 @@ pre {
   border-color: #ededee;
   padding: 2px 6px;
 }
+.review-agent-controls {
+  margin: -6px 0 22px;
+  min-width: 0;
+}
+.review-agent-controls form {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.review-agent-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: #85858b;
+  font-size: 10px;
+}
+.review-agent-controls select {
+  height: 34px;
+  padding: 5px 9px;
+  max-width: 100%;
+  font-size: 12px;
+  border-color: #e9e9eb;
+}
+.review-agent-controls .agent-model-control {
+  flex: 1;
+  max-width: 330px;
+  min-width: 140px;
+}
+.review-agent-controls .primary {
+  height: 34px;
+  margin-left: auto;
+  font-size: 12px;
+}
+.agent-settings-feedback {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 6px;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+.agent-settings-feedback .hint {
+  font-size: 10px;
+}
+.agent-settings-feedback .error {
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.agent-settings-feedback .text-button {
+  font-size: 11px;
+  padding: 0;
+}
 .reader-tabs {
   display: flex;
   align-items: center;
@@ -1413,6 +1468,18 @@ pre {
     gap: 10px;
     font-size: 10px;
     margin-bottom: 18px;
+  }
+  .review-agent-controls form {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px 10px;
+  }
+  .review-agent-controls .agent-model-control {
+    min-width: 0;
+    max-width: none;
+  }
+  .review-agent-controls .primary {
+    width: 100%;
   }
   .reader-tabs {
     gap: 23px;

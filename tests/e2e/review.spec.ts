@@ -30,6 +30,8 @@ test("new run feedback streams live, recovers after reload and reconnect, and re
     const panel = page.getByRole("region", { name: "本次分析" });
     await expect(panel).toContainText("已核对取消操作，现在检查资源释放路径。");
     await expect(panel).toContainText("12,600");
+    await expect(page.getByLabel("MR Agent", { exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "分析中…" })).toBeDisabled();
     await expect(panel).toContainText("进度已连接");
     await control("disconnect");
     await expect(panel).toContainText("正在恢复事件");
@@ -111,7 +113,10 @@ test("viewer can interact and read shared evidence but has no private data or wr
     page.getByRole("heading", { name: "Make cancellation explicit" }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "问 Agent ↗" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "生成讲解" })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: /生成讲解|重新讲解/ }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("MR Agent", { exact: true })).toHaveCount(0);
   await expect(page.locator("body")).not.toContainText(
     "PRIVATE-QUESTION-SENTINEL",
   );
@@ -187,28 +192,33 @@ test("mobile layout keeps navigation, diff and owner inspector usable without ho
   ).toBe(false);
 });
 
-test("MR model and thinking effort overrides use the same persistent API as CLI", async ({
+test("inline MR settings automatically persist and restore inheritance through the CLI API", async ({
   page,
 }) => {
   await openOwner(page);
-  await page.getByRole("button", { name: "当前 MR 的 Agent 设置" }).click();
-  await expect(page.getByRole("dialog")).toContainText("此 MR 的 Agent 设置");
-  await page
-    .getByLabel("traex 模型", { exact: true })
-    .selectOption("test-model");
-  await page
-    .getByLabel("traex thinking effort", { exact: true })
-    .selectOption("high");
-  await page.getByRole("button", { name: "保存 MR 设置", exact: true }).click();
+  const reviewId = new URL(page.url()).pathname.split("/")[2];
+  const controls = page.getByRole("region", { name: "当前 MR 的 Agent 设置" });
+  await expect(controls.getByLabel("MR thinking effort")).toBeEnabled();
+  await controls.getByLabel("MR 模型").selectOption("test-model");
+  await expect(controls.getByLabel("MR thinking effort")).toBeEnabled();
+  await controls.getByLabel("MR thinking effort").selectOption("high");
+  await expect(controls.getByLabel("MR thinking effort")).toBeEnabled();
+  expect(
+    (await (await page.request.get(`/api/v1/reviews/${reviewId}/agent`)).json())
+      .data.overrides.traex,
+  ).toEqual({ model: "test-model", effort: "high" });
+  await page.reload();
+  await expect(controls.getByLabel("MR 模型")).toHaveValue("test-model");
+  await expect(controls.getByLabel("MR thinking effort")).toHaveValue("high");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("button", { name: "当前 MR 的 Agent 设置" }).click();
-  await expect(
-    page.getByLabel("traex thinking effort", { exact: true }),
-  ).toHaveValue("high");
-  await page
-    .getByLabel("traex thinking effort", { exact: true })
-    .selectOption("");
-  await page.getByRole("button", { name: "保存 MR 设置", exact: true }).click();
+  await controls.getByLabel("MR thinking effort").selectOption("");
+  await expect(controls.getByLabel("MR 模型")).toBeEnabled();
+  await controls.getByLabel("MR 模型").selectOption("");
+  await expect(controls.getByLabel("MR 模型")).toBeEnabled();
+  expect(
+    (await (await page.request.get(`/api/v1/reviews/${reviewId}/agent`)).json())
+      .data.overrides.traex,
+  ).toEqual({});
 });
 
 test("copied MR subpage links open the same canonical review in the UI", async ({
@@ -233,7 +243,7 @@ test("copied MR subpage links open the same canonical review in the UI", async (
   );
 });
 
-test("regeneration selects a per-run backend/model/effort, retains failures for retry, and leaves defaults unchanged", async ({
+test("visible MR dropdowns feed direct regeneration, retain failures, and leave global defaults unchanged", async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -241,37 +251,13 @@ test("regeneration selects a per-run backend/model/effort, retains failures for 
   await openOwner(page);
   const reviewId = new URL(page.url()).pathname.split("/")[2];
   const settingsUrl = `/api/v1/reviews/${reviewId}/agent`;
-  const before = (await (await page.request.get(settingsUrl)).json()).data;
   const global = (await (await page.request.get("/api/v1/config")).json()).data;
-  await page.route("**/api/v1/agents/codex/models", (route) =>
-    route.fulfill({
-      json: {
-        ok: true,
-        data: {
-          models: [
-            {
-              id: "test-model",
-              model: "test-model",
-              displayName: "Test Model",
-              isDefault: true,
-              defaultEffort: "medium",
-              efforts: [{ effort: "medium" }, { effort: "high" }],
-            },
-            {
-              id: "fast-model",
-              model: "fast-model",
-              displayName: "Fast Model",
-              defaultEffort: "low",
-              efforts: [{ effort: "low" }, { effort: "high" }],
-            },
-          ],
-        },
-      },
-    }),
-  );
+  const controls = page.getByRole("region", { name: "当前 MR 的 Agent 设置" });
   const submitted: any[] = [];
+  const effective: any[] = [];
   await page.route(`**/api/v1/reviews/${reviewId}/analyze`, async (route) => {
     submitted.push(route.request().postDataJSON());
+    effective.push((await (await page.request.get(settingsUrl)).json()).data);
     if (submitted.length === 1)
       await route.fulfill({
         status: 422,
@@ -299,61 +285,76 @@ test("regeneration selects a per-run backend/model/effort, retains failures for 
         },
       });
   });
-  await page.getByRole("button", { name: "重新讲解" }).click();
-  const dialog = page.getByRole("dialog", { name: "重新讲解" });
-  await expect(dialog.getByLabel("本次讲解 Agent")).toHaveValue(before.backend);
-  await dialog.getByLabel("本次讲解 Agent").selectOption("codex");
-  await expect(dialog.getByLabel("本次讲解模型")).toBeEnabled();
-  await dialog.getByLabel("本次讲解模型").selectOption("fast-model");
-  await expect(dialog.getByLabel("本次讲解 thinking effort")).toHaveValue("");
-  await expect(dialog.getByLabel("本次讲解 thinking effort")).toContainText(
-    "模型默认 · low",
-  );
-  await expect(
-    dialog
-      .getByLabel("本次讲解 thinking effort")
-      .locator('option[value="medium"]'),
-  ).toHaveCount(0);
-  await dialog.getByLabel("本次讲解 thinking effort").selectOption("high");
-  await page.screenshot({ path: "/tmp/unfold-generation-options-desktop.png" });
-  await dialog.getByRole("button", { name: "开始讲解", exact: true }).click();
-  await expect(dialog.getByRole("alert")).toContainText(
-    "Synthetic backend temporarily unavailable",
-  );
-  await expect(dialog.getByLabel("本次讲解模型")).toHaveValue("fast-model");
-  await expect(dialog.getByLabel("本次讲解 thinking effort")).toHaveValue(
-    "high",
-  );
-  await page.setViewportSize({ width: 390, height: 844 });
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth > innerWidth,
-    ),
-  ).toBe(false);
-  await expect(
-    dialog.getByRole("button", { name: "开始讲解", exact: true }),
-  ).toBeInViewport();
-  await page.screenshot({ path: "/tmp/unfold-generation-options-mobile.png" });
-  await dialog.getByRole("button", { name: "开始讲解", exact: true }).click();
-  await expect(dialog).toHaveCount(0);
-  expect(submitted).toEqual([
-    { backend: "codex", model: "fast-model", effort: "high" },
-    { backend: "codex", model: "fast-model", effort: "high" },
-  ]);
-  expect((await (await page.request.get(settingsUrl)).json()).data).toEqual(
-    before,
-  );
-  expect(
-    (await (await page.request.get("/api/v1/config")).json()).data,
-  ).toEqual(global);
-  expect(errors).toEqual([]);
+  try {
+    await expect(controls.getByLabel("MR Agent")).toBeEnabled();
+    await controls.getByLabel("MR Agent").selectOption("codex");
+    await expect(controls.getByLabel("MR 模型")).toBeEnabled();
+    await controls.getByLabel("MR 模型").selectOption("fast-model");
+    await expect(controls.getByLabel("MR thinking effort")).toBeEnabled();
+    await expect(controls.getByLabel("MR thinking effort")).toContainText(
+      "模型默认 · low",
+    );
+    await expect(
+      controls
+        .getByLabel("MR thinking effort")
+        .locator('option[value="medium"]'),
+    ).toHaveCount(0);
+    await controls.getByLabel("MR thinking effort").selectOption("high");
+    await expect(
+      controls.getByRole("button", { name: "重新讲解" }),
+    ).toBeEnabled();
+    expect(submitted).toHaveLength(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.screenshot({ path: "/tmp/unfold-inline-agent-desktop.png" });
+    await controls.getByRole("button", { name: "重新讲解" }).click();
+    await expect(controls.getByRole("alert")).toContainText(
+      "Synthetic backend temporarily unavailable",
+    );
+    await expect(controls.getByLabel("MR 模型")).toHaveValue("fast-model");
+    await expect(controls.getByLabel("MR thinking effort")).toHaveValue("high");
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+    ).toBe(false);
+    await expect(
+      controls.getByRole("button", { name: "重新讲解" }),
+    ).toBeInViewport();
+    await controls.getByRole("button", { name: "重新讲解" }).click();
+    await expect(controls.getByRole("alert")).toHaveCount(0);
+    await expect(controls.getByLabel("MR 模型")).toHaveValue("fast-model");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await page.screenshot({ path: "/tmp/unfold-inline-agent-mobile.png" });
+    expect(submitted).toEqual([{}, {}]);
+    for (const settings of effective) {
+      expect(settings.backend).toBe("codex");
+      expect(settings.profiles.codex).toEqual({
+        model: "fast-model",
+        effort: "high",
+      });
+    }
+    await page.reload();
+    await expect(controls.getByLabel("MR Agent")).toHaveValue("codex");
+    await expect(controls.getByLabel("MR 模型")).toHaveValue("fast-model");
+    await expect(controls.getByLabel("MR thinking effort")).toHaveValue("high");
+    expect(
+      (await (await page.request.get("/api/v1/config")).json()).data,
+    ).toEqual(global);
+    expect(errors).toEqual([]);
+  } finally {
+    await page.request.patch(`/api/v1/reviews/${reviewId}`, {
+      data: {
+        backend: null,
+        agentOverrides: { codex: { model: null, effort: null } },
+      },
+    });
+  }
 });
 
-test("model catalog failures are recoverable and model-default effort is an explicit per-run choice", async ({
+test("inline model catalog failures recover without a generation dialog", async ({
   page,
 }) => {
-  await openOwner(page);
-  const reviewId = new URL(page.url()).pathname.split("/")[2];
   let modelReads = 0;
   await page.route("**/api/v1/agents/traex/models", async (route) => {
     modelReads++;
@@ -370,15 +371,17 @@ test("model catalog failures are recoverable and model-default effort is an expl
       });
     else await route.fallback();
   });
-  await page.getByRole("button", { name: "重新讲解" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("alert")).toContainText(
+  await openOwner(page);
+  const reviewId = new URL(page.url()).pathname.split("/")[2];
+  const controls = page.getByRole("region", { name: "当前 MR 的 Agent 设置" });
+  await expect(controls.getByRole("alert")).toContainText(
     "Synthetic catalog unavailable",
   );
-  await expect(dialog.getByRole("button", { name: "开始讲解" })).toBeDisabled();
-  await dialog.getByRole("button", { name: "重新读取模型" }).click();
-  await expect(dialog.getByLabel("本次讲解模型")).toBeEnabled();
-  await dialog.getByLabel("本次讲解 thinking effort").selectOption("");
+  await expect(
+    controls.getByRole("button", { name: "重新讲解" }),
+  ).toBeDisabled();
+  await controls.getByRole("button", { name: "重新读取模型" }).click();
+  await expect(controls.getByLabel("MR 模型")).toBeEnabled();
   let payload: any;
   await page.route(`**/api/v1/reviews/${reviewId}/analyze`, async (route) => {
     payload = route.request().postDataJSON();
@@ -386,20 +389,80 @@ test("model catalog failures are recoverable and model-default effort is an expl
       json: {
         ok: true,
         data: {
-          id: "synthetic-default-effort",
+          id: "synthetic-inherited-effort",
           kind: "analysis",
           state: "succeeded",
         },
       },
     });
   });
-  await dialog.getByRole("button", { name: "开始讲解" }).click();
-  await expect(dialog).toHaveCount(0);
-  expect(payload).toEqual({
-    backend: "traex",
-    model: "test-model",
-    effort: null,
+  await controls.getByRole("button", { name: "重新讲解" }).click();
+  await expect(
+    controls.getByRole("button", { name: "重新讲解" }),
+  ).toBeEnabled();
+  expect(payload).toEqual({});
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("failed automatic MR saves block analysis until the exact selection is saved", async ({
+  page,
+}) => {
+  await openOwner(page);
+  const reviewId = new URL(page.url()).pathname.split("/")[2];
+  const controls = page.getByRole("region", { name: "当前 MR 的 Agent 设置" });
+  let saves = 0;
+  let releaseSave!: () => void;
+  const held = new Promise<void>((resolve) => {
+    releaseSave = resolve;
   });
+  await page.route(`**/api/v1/reviews/${reviewId}`, async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    saves++;
+    if (saves === 1) {
+      await held;
+      await route.fulfill({
+        status: 503,
+        json: {
+          ok: false,
+          error: { code: "unavailable", message: "Synthetic save unavailable" },
+        },
+      });
+    } else await route.fallback();
+  });
+  try {
+    await expect(controls.getByLabel("MR thinking effort")).toBeEnabled();
+    await controls.getByLabel("MR thinking effort").selectOption("high");
+    await expect(controls.getByRole("status")).toContainText("正在保存");
+    await expect(
+      controls.getByRole("button", { name: "重新讲解" }),
+    ).toBeDisabled();
+    releaseSave();
+    await expect(controls.getByRole("alert")).toContainText(
+      "Synthetic save unavailable",
+    );
+    await expect(controls.getByLabel("MR thinking effort")).toHaveValue("high");
+    await expect(
+      controls.getByRole("button", { name: "重新讲解" }),
+    ).toBeDisabled();
+    const original = (
+      await (await page.request.get(`/api/v1/reviews/${reviewId}/agent`)).json()
+    ).data;
+    expect(original.overrides.traex?.effort).toBeUndefined();
+    await controls.getByRole("button", { name: "重试保存" }).click();
+    await expect(controls.getByRole("alert")).toHaveCount(0);
+    await expect(
+      controls.getByRole("button", { name: "重新讲解" }),
+    ).toBeEnabled();
+    const saved = (
+      await (await page.request.get(`/api/v1/reviews/${reviewId}/agent`)).json()
+    ).data;
+    expect(saved.overrides.traex.effort).toBe("high");
+  } finally {
+    releaseSave();
+    await page.request.patch(`/api/v1/reviews/${reviewId}`, {
+      data: { agentOverrides: { traex: { effort: null } } },
+    });
+  }
 });
 
 test("saving unchanged settings confirms application without a manual connector restart", async ({
@@ -411,7 +474,9 @@ test("saving unchanged settings confirms application without a manual connector 
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("工作区设置");
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("配置已生效");
+  await expect(page.getByRole("dialog").getByRole("status")).toContainText(
+    "配置已生效",
+  );
   await expect(page.getByRole("dialog")).not.toContainText("请重启");
   expect(errors).toEqual([]);
 });
@@ -439,11 +504,13 @@ test("saved pending settings become applied automatically and readiness failures
   await expect(page.getByRole("dialog")).toContainText("工作区设置");
   status = { state: "pending" };
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText(
+  await expect(page.getByRole("dialog").getByRole("status")).toContainText(
     "当前任务结束后自动生效",
   );
   status = { state: "applied" };
-  await expect(page.getByRole("status")).toContainText("配置已生效");
+  await expect(page.getByRole("dialog").getByRole("status")).toContainText(
+    "配置已生效",
+  );
   await page.unroute("**/api/v1/config");
   await page.route("**/api/v1/config", (route) =>
     route.request().method() === "PATCH"
@@ -463,8 +530,10 @@ test("saved pending settings become applied automatically and readiness failures
       : route.fallback(),
   );
   await page.getByRole("button", { name: "保存设置", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("已保存，但应用失败");
-  await expect(page.getByRole("status")).toContainText(
+  await expect(page.getByRole("dialog").getByRole("status")).toContainText(
+    "已保存，但应用失败",
+  );
+  await expect(page.getByRole("dialog").getByRole("status")).toContainText(
     "Synthetic readiness failure",
   );
   await expect(page.getByRole("button", { name: "重试应用" })).toBeVisible();

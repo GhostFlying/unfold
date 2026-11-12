@@ -27,6 +27,7 @@ function App() {
     [backend, setBackend] = useState<Backend | "">(""),
     [defaultBackend, setDefaultBackend] = useState<Backend>("traex"),
     [settings, setSettings] = useState(false),
+    [settingsRevision, setSettingsRevision] = useState(0),
     [error, setError] = useState(""),
     [url, setUrl] = useState(""),
     [busy, setBusy] = useState(false),
@@ -127,6 +128,7 @@ function App() {
           id={match[1]}
           explanationId={match[2]}
           owner={isOwner}
+          settingsRevision={settingsRevision}
           onChange={reload}
         />
       ) : bootstrap.mode === "owner" && !isOwner ? (
@@ -324,7 +326,13 @@ function App() {
         </main>
       )}
       {settings ? (
-        <Settings onClose={() => setSettings(false)} onSave={reload} />
+        <Settings
+          onClose={() => setSettings(false)}
+          onSave={async () => {
+            await reload();
+            setSettingsRevision((revision) => revision + 1);
+          }}
+        />
       ) : null}
     </>
   );
