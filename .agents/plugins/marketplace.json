@@ -1,0 +1,12 @@
+{
+  "name": "unfold-tools",
+  "interface": { "displayName": "Unfold" },
+  "plugins": [
+    {
+      "name": "unfold",
+      "source": { "source": "local", "path": "./plugins/unfold" },
+      "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+      "category": "Productivity"
+    }
+  ]
+}

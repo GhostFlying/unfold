@@ -92,6 +92,8 @@ Generated HTML runs in an opaque-origin `sandbox="allow-scripts"` iframe with a 
 
 ## CLI and development
 
+For post-submission automation, install the bundled [unfold-review skill](plugins/unfold/skills/unfold-review/SKILL.md) or [Unfold Codex plugin](plugins/unfold). The helper refreshes the MR, checks the exact submitted head, prepares or reuses its explanation, and returns a verified read-only URL pinned to that explanation. The calling agent can pass its short forwarding message to an authorized company review-chat workflow. Setup, installation, CLI options and an automatic post-submission project instruction are in [the agent integration guide](docs/agent-integration.md).
+
 See [the CLI reference](docs/cli.md) for commands, JSON output, event waiting and exit codes. `--body-file -` accepts stdin. `--wait` stops at a terminal result or pending approval, with an operation ID that can be resumed using `watch` after a decision. Waiting uses an event stream, not model-driven polling.
 
 ```sh
