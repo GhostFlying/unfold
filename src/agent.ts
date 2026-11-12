@@ -3,6 +3,11 @@ import {
   mkdirSync,
   existsSync,
   symlinkSync,
+  lstatSync,
+  readlinkSync,
+  renameSync,
+  accessSync,
+  constants,
   writeFileSync,
   createWriteStream,
 } from "node:fs";
@@ -32,6 +37,7 @@ export interface AgentParams {
   backend: Backend;
   kind: "analysis" | "question";
   profile?: ModelProfile;
+  connectionRevision?: string;
   question?: string;
   context?: Reference;
   explanation?: Explanation;
@@ -80,15 +86,9 @@ export class AgentHost {
       backend === "traex" ? "cli/auth.json" : "auth.json",
     );
     mkdirSync(path.dirname(authDest), { recursive: true, mode: 0o700 });
-    if (!existsSync(authDest)) {
-      if (!existsSync(cfg.authFile))
-        throw new AppError(
-          "authentication_required",
-          `Log in with ${backend} first`,
-          401,
-        );
-      symlinkSync(cfg.authFile, authDest);
-    }
+    // Connection changes are installed only after the connector's runtime leases drain.
+    const cliVersion = (await command(cfg.executable, ["--version"])).trim();
+    updateAuthLink(cfg.authFile, authDest, backend);
     const safeConfig: Record<string, any> = {
       model_provider: cfg.provider || (backend === "traex" ? "trae" : "openai"),
       approval_policy: "never",
@@ -121,7 +121,6 @@ export class AgentHost {
       stringify(safeConfig),
       { mode: 0o600 },
     );
-    const cliVersion = (await command(cfg.executable, ["--version"])).trim();
     const env = {
       ...process.env,
       [backend === "traex" ? "TRAE_HOME" : "CODEX_HOME"]: home,
@@ -160,7 +159,11 @@ export class AgentHost {
     } while (cursor);
     return models;
   }
-  async catalog(backend: Backend, profile?: ModelProfile) {
+  async catalog(
+    backend: Backend,
+    profile?: ModelProfile,
+    checkAccount = false,
+  ) {
     const { cfg, home, env } = await this.runtime(backend);
     const native = new NativeRpc(
       cfg.executable,
@@ -169,6 +172,17 @@ export class AgentHost {
     );
     try {
       await this.initialize(native);
+      if (checkAccount) {
+        const account = await native.request("account/read", {
+          refreshToken: false,
+        });
+        if (!account.account)
+          throw new AppError(
+            "authentication_required",
+            `Authenticate ${backend} first`,
+            401,
+          );
+      }
       const models = await this.listModels(native);
       if (!profile) return { backend, models };
       return resolveModelProfile(models, profile);
@@ -793,4 +807,42 @@ export function resolveModelProfile(
       },
     );
   return { model: model.model, effort };
+}
+
+export function updateAuthLink(
+  authFile: string,
+  authDest: string,
+  backend: Backend,
+) {
+  try {
+    accessSync(authFile, constants.R_OK);
+  } catch {
+    throw new AppError(
+      "authentication_required",
+      `Log in with ${backend} first; its configured authentication file is unreadable`,
+      401,
+    );
+  }
+  let existing;
+  try {
+    existing = lstatSync(authDest);
+  } catch (error: any) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  if (existing) {
+    if (!existing.isSymbolicLink())
+      throw new AppError(
+        "authentication_storage_conflict",
+        "Unfold authentication storage contains an unmanaged file",
+        409,
+      );
+    if (
+      path.resolve(path.dirname(authDest), readlinkSync(authDest)) ===
+      path.resolve(authFile)
+    )
+      return;
+  }
+  const temporary = `${authDest}.${id()}.tmp`;
+  symlinkSync(path.resolve(authFile), temporary);
+  renameSync(temporary, authDest);
 }

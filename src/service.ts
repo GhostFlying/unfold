@@ -7,6 +7,7 @@ import {
   AppError,
   type Approval,
   type Backend,
+  type ConfigApplication,
   type ModelProfile,
   type Draft,
   type Explanation,
@@ -54,6 +55,19 @@ export class Service {
       method,
       params,
     );
+  }
+  async configurationStatus(apply = false): Promise<ConfigApplication> {
+    try {
+      return await this.rpc<ConfigApplication>(
+        apply ? "reload_config" : "config_status",
+        {},
+      );
+    } catch (error: any) {
+      return {
+        state: "unavailable",
+        error: error.message || "Connector is unavailable",
+      };
+    }
   }
   review(reviewId: string) {
     const review = this.store.get<Review>("review", reviewId);
@@ -275,7 +289,9 @@ export class Service {
         r.agentOverrides?.[backend]?.effort ||
         this.config.agents[backend].effort,
     };
-    const profile = await this.rpc<ModelProfile>("models", {
+    const profile = await this.rpc<
+      ModelProfile & { connectionRevision?: string }
+    >("models", {
       backend,
       profile: requestedProfile,
     });
@@ -294,6 +310,7 @@ export class Service {
       backend,
       ...profile,
       requestedProfile,
+      connectionRevision: profile.connectionRevision,
       question: options.question,
       context,
       explanationId: kind === "question" ? explanation?.id : undefined,
@@ -318,7 +335,8 @@ export class Service {
       kind === "question" &&
       latestQuestion?.backend === backend &&
       latestQuestion.model === profile.model &&
-      latestQuestion.effort === profile.effort
+      latestQuestion.effort === profile.effort &&
+      latestQuestion.connectionRevision === profile.connectionRevision
         ? latestQuestion.threadId
         : undefined;
     const task = this.drive(
@@ -328,6 +346,7 @@ export class Service {
         snapshot: this.version(reviewId, versionId),
         backend,
         profile,
+        connectionRevision: profile.connectionRevision,
         kind,
         question: options.question,
         context,

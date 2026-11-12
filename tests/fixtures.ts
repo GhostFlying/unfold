@@ -3,8 +3,15 @@ import path from "node:path";
 import { mkdtempSync, rmSync } from "node:fs";
 import { Service } from "../src/service.js";
 import { hash } from "../src/util.js";
+import { connectorRevision } from "../src/connector-runtime.js";
 import type { Config } from "../src/config.js";
-import type { Explanation, Snapshot, Source, Target } from "../src/types.js";
+import type {
+  ConfigApplication,
+  Explanation,
+  Snapshot,
+  Source,
+  Target,
+} from "../src/types.js";
 export const target: Target = {
   provider: "codebase",
   host: "code.example.test",
@@ -61,9 +68,20 @@ export class FakeService extends Service {
   writes = 0;
   writeDelay = 0;
   uncertain = false;
+  application?: ConfigApplication;
+  reloads = 0;
+  modelQueries = 0;
   override async rpc<T>(method: string, p: any): Promise<T> {
     let data: any;
-    if (method === "snapshot") {
+    if (method === "reload_config" || method === "config_status") {
+      if (method === "reload_config") this.reloads++;
+      data = this.application || {
+        state: "applied",
+        desiredRevision: connectorRevision(this.config),
+        appliedRevision: connectorRevision(this.config),
+        activeOperations: 0,
+      };
+    } else if (method === "snapshot") {
       await new Promise((r) => setTimeout(r, 5));
       data = structuredClone(this.current);
     } else if (method === "source") {
@@ -77,6 +95,7 @@ export class FakeService extends Service {
         content: sourceText,
       } as Source;
     } else if (method === "models") {
+      this.modelQueries++;
       const models = [
         {
           id: "test-model",

@@ -8,7 +8,7 @@ Run `pnpm unfold --help`, or build and invoke `node bin/unfold.mjs` / link the e
 | Run HTTP service / native connector      | `serve` / `connector`                                                                                                                          |
 | Diagnose CLI availability                | `doctor`                                                                                                                                       |
 | Print owner key explicitly               | `auth token`                                                                                                                                   |
-| Read / change shared configuration       | `config show`, `config set KEY JSON_VALUE`                                                                                                     |
+| Read / change shared configuration       | `config show`, `config set KEY JSON_VALUE`, `config status`, `config apply`                                                                    |
 | Import / list / read / refresh           | `import URL [--backend traex\|codex]`, `list`, `show REVIEW`, `refresh REVIEW`                                                                 |
 | Change per-review backend                | `backend REVIEW traex\|codex`                                                                                                                  |
 | Generate / ask                           | `analyze REVIEW [--backend NAME] [--wait]`, `ask REVIEW --body TEXT [--reference ID] [--explanation ID] [--wait]`                              |
@@ -32,11 +32,12 @@ JSON success: `{"ok":true,"data":...}`. Errors go to stderr as `{"ok":false,"err
 | 3    | Exact confirmation or execution approval required                              |
 | 4    | Version, draft, or operation conflict                                          |
 | 5    | Publication outcome unknown; reconcile, do not retry                           |
+| 7    | Settings were saved but application failed or could not be confirmed           |
 | 6    | Authentication required                                                        |
 
 `analyze` and `ask` without `--wait` return a run ID immediately. With `--wait`, the CLI observes SSE until success, failure, interruption or a pending execution approval. Exit 3 carries the run ID; inspect `approval list`, decide the exact request and call `watch RUN`. Disconnecting the observer does not cancel a run. `cancel RUN` is explicit. An unknown publication remains blocked until a successful readback identifies the original comment; it is not implicitly reset to a fresh draft.
 
-Configuration edits that affect backend executable/model/authentication or connector routing require restarting the connector. Authentication files are never returned to the generated page or written to the source tree. Keep runtime configuration and receipts under `.local/`.
+Saved settings apply automatically. An idle connector validates and installs changed connection settings online; active investigations, approval waits and publications retain their existing runtime until they finish. `config status` reports `applied`, `pending`, `applying`, `failed` or `unavailable`, with desired/applied revision IDs. `config apply` retries a saved configuration after a failed check. A failed application blocks new native work instead of silently using an older connection. Authentication files are never returned to the generated page or written to the source tree. Keep runtime configuration and receipts under `.local/`.
 
 ### Models and thinking effort
 
@@ -56,6 +57,6 @@ Global defaults are per backend. MR overrides are per backend as well, so switch
 
 ### Host connector lifecycle
 
-`unfold connector` is the native connector process. Keep one instance per configured Unix socket. For a persistent Linux deployment, adapt `deploy/unfold-connector.service.example`, then use `systemctl --user enable --now unfold-connector`. Restart it after changing CLI installation/authentication locations or rebuilding the connector. Saved model/effort defaults apply to new operations without restarting it. Compose runs only the Web/API; the connector remains on the host.
+`unfold connector` is the native connector process. Keep one instance per configured Unix socket. For a persistent Linux deployment, adapt `deploy/unfold-connector.service.example`, then use `systemctl --user enable --now unfold-connector`. Restart it after rebuilding the connector software or changing its process environment. Editable CLI installation, authentication, provider, model and effort settings apply automatically without restarting the connector process. Compose runs only the Web/API; the connector remains on the host.
 
 For a host that requires a network proxy or a custom CA, set only those required variables in a private `.local/connector.env` file (mode 0600). The example service loads it explicitly: a user service does not automatically inherit an interactive terminal’s network settings. Keep native authentication in the original credential files.

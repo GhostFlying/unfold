@@ -20,7 +20,7 @@ The complex read example and the specifically authorized write target are separa
 
 ## Automated verification
 
-`pnpm check` runs TypeScript checks, 21 focused tests, and a production build. `pnpm test:e2e` runs five Chromium tests for the reader, source selection and editable preview, viewer restrictions, hostile HTML, mobile layout, and MR model/effort settings.
+`pnpm check` runs TypeScript checks, 28 focused tests, and a production build. `pnpm test:e2e` runs seven Chromium tests for the reader, source selection and editable preview, viewer restrictions, hostile HTML, mobile layout, and MR model/effort settings.
 
 Synthetic tests cover concurrent duplicate import, latest-version changes and old explanations, side-aware diff positions, unknown publication results and marker reconciliation, idempotent/concurrent publishing, explicit general-comment relocation, preview digest changes, restart interruption, private source caches, unshared reviews, API authentication/origin checks, exact single-use execution approvals, and long event-history replay. A real bwrap process with a synthetic snapshot verifies a separate network namespace, an empty credential environment, inaccessible owner files and disposable writes. It is not execution proof for any reviewed repository.
 
@@ -33,3 +33,7 @@ Source snapshots and HTML have private filesystem artifacts alongside their SQLi
 - Project execution requires another exact owner approval. Large snapshots are bounded; binary files, symlinks, submodules and unavailable source are rejected instead of producing a partial executable checkout.
 - Connector and service interruptions do not replay an approval, a publication or an analysis. An uncertain publication requires marker reconciliation.
 - This is a single-owner deployment with one analysis slot, not a team platform or an author-agent scheduler.
+
+## Automatic configuration application
+
+Settings saves compare actual values, apply changed connections automatically, and report desired/applied revisions through the settings dialog and CLI. Native investigations, execution approval waits and platform writes keep their original runtime until they finish. New connection readiness is checked in an isolated temporary home; failed checks cannot replace persistent backend authentication or admit new work with an older connection. The connector process does not need to restart for editable settings. Focused tests also cover unchanged forms, queued saves, superseded changes, readiness failures, authentication link changes and protected reload/status endpoints.

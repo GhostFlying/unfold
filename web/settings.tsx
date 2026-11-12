@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { ConfigApplication } from "../src/types.js";
 import { ProfileFields } from "./agent-settings.js";
 import { api } from "./api.js";
 export function Settings({
@@ -10,12 +11,44 @@ export function Settings({
 }) {
   const [config, setConfig] = useState<any>(),
     [error, setError] = useState(""),
-    [notice, setNotice] = useState("");
+    [notice, setNotice] = useState(""),
+    [saving, setSaving] = useState(false),
+    [application, setApplication] = useState<ConfigApplication>();
   useEffect(() => {
-    api("/config")
-      .then(setConfig)
+    Promise.all([api("/config"), api<ConfigApplication>("/config/status")])
+      .then(([config, application]) => {
+        setConfig(config);
+        setApplication(application);
+      })
       .catch((e) => setError(e.message));
   }, []);
+  useEffect(() => {
+    if (
+      !application ||
+      !["pending", "applying", "unavailable"].includes(application.state)
+    )
+      return;
+    const timer = setTimeout(() => {
+      api<ConfigApplication>("/config/status")
+        .then(setApplication)
+        .catch((e) =>
+          setApplication({ state: "unavailable", error: e.message }),
+        );
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [application]);
+  const applicationMessage =
+    application?.state === "applied"
+      ? "配置已生效"
+      : application?.state === "pending"
+        ? "已保存，当前任务结束后自动生效"
+        : application?.state === "applying"
+          ? "已保存，正在应用并检查连接…"
+          : application?.state === "failed"
+            ? "已保存，但应用失败"
+            : application?.state === "unavailable"
+              ? "已保存，暂时无法确认生效状态"
+              : "";
   return (
     <div className="modal-backdrop">
       <section
@@ -39,6 +72,9 @@ export function Settings({
           <form
             onSubmit={async (e) => {
               e.preventDefault();
+              setSaving(true);
+              setError("");
+              setNotice("");
               try {
                 const r = await api("/config", "PATCH", {
                   defaultBackend: config.defaultBackend,
@@ -47,14 +83,13 @@ export function Settings({
                   codebaseHosts: config.codebaseHosts,
                   agents: config.agents,
                 });
-                setNotice(
-                  r.restartConnectorRequired
-                    ? "已保存。请重启 connector 以应用接入配置。"
-                    : "已保存",
-                );
+                setApplication(r.application);
+                setNotice("已保存");
                 await onSave();
               } catch (e: any) {
                 setError(e.message);
+              } finally {
+                setSaving(false);
               }
             }}
           >
@@ -107,7 +142,7 @@ export function Settings({
             </label>
             {(["traex", "codex"] as const).map((b) => (
               <ProfileFields
-                key={b}
+                key={`${b}:${application?.appliedRevision || "initial"}`}
                 backend={b}
                 value={config.agents[b]}
                 onChange={(p) =>
@@ -125,9 +160,52 @@ export function Settings({
                 }
               />
             ))}
-            {notice ? <p className="notice">{notice}</p> : null}
+            {notice || (application && application.state !== "applied") ? (
+              <div
+                role="status"
+                aria-live="polite"
+                className={
+                  application?.state === "failed" ||
+                  application?.state === "unavailable"
+                    ? "error"
+                    : "notice"
+                }
+              >
+                <p>{applicationMessage || notice}</p>
+                {application?.error ? <p>{application.error}</p> : null}
+              </div>
+            ) : null}
             <footer>
-              <button className="primary">保存设置</button>
+              {application &&
+              ["failed", "unavailable"].includes(application.state) ? (
+                <button
+                  type="button"
+                  className="quiet"
+                  disabled={saving}
+                  onClick={async () => {
+                    setSaving(true);
+                    setError("");
+                    try {
+                      setApplication(
+                        await api<ConfigApplication>(
+                          "/config/apply",
+                          "POST",
+                          {},
+                        ),
+                      );
+                    } catch (e: any) {
+                      setError(e.message);
+                    } finally {
+                      setSaving(false);
+                    }
+                  }}
+                >
+                  重试应用
+                </button>
+              ) : null}
+              <button className="primary" disabled={saving}>
+                {saving ? "正在保存并应用…" : "保存设置"}
+              </button>
             </footer>
           </form>
         ) : (

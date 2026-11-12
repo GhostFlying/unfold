@@ -257,8 +257,25 @@ auth
       }),
     ),
   );
+function configurationResult(result: any) {
+  out(result);
+  if (["failed", "unavailable"].includes((result.application || result).state))
+    process.exitCode = 7;
+}
 const config = program.command("config");
 config.command("show").action(wrap(async () => out(await api("/config"))));
+config
+  .command("status")
+  .description("Inspect automatic application of saved settings")
+  .action(wrap(async () => configurationResult(await api("/config/status"))));
+config
+  .command("apply")
+  .description("Retry applying saved settings without restarting active work")
+  .action(
+    wrap(async () =>
+      configurationResult(await api("/config/apply", "POST", {})),
+    ),
+  );
 config
   .command("set <key> <json-value>")
   .description("Set a shared setting; JSON strings must be quoted")
@@ -274,7 +291,9 @@ config
         ].includes(key)
       )
         throw new AppError("invalid_input", "Unsupported configuration key");
-      out(await api("/config", "PATCH", { [key]: JSON.parse(value) }));
+      configurationResult(
+        await api("/config", "PATCH", { [key]: JSON.parse(value) }),
+      );
     }),
   );
 const agent = program
@@ -303,7 +322,9 @@ agent
       }
       if (o.model) settings.model = o.model;
       if (o.effort) settings.effort = o.effort;
-      out(await api("/config", "PATCH", { agents: { [backend]: settings } }));
+      configurationResult(
+        await api("/config", "PATCH", { agents: { [backend]: settings } }),
+      );
     }),
   );
 agent

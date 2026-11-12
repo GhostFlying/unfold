@@ -64,7 +64,7 @@ test("global and review profiles inherit, clear independently, and reject unsupp
       },
     });
     assert.equal(global.statusCode, 200, global.body);
-    assert.equal(global.json().data.restartConnectorRequired, false);
+    assert.equal(global.json().data.application.state, "applied");
     assert.equal(
       (
         await app.inject({ url: `/api/v1/reviews/${review.id}/agent`, headers })
@@ -144,6 +144,64 @@ test("container overrides do not replace persisted host paths when saving defaul
       if (previous[key] === undefined) delete process.env[key];
       else process.env[key] = previous[key];
     }
+    f.cleanup();
+  }
+});
+
+test("unchanged form fields apply automatically without redundant model checks", async () => {
+  const f = fixture();
+  const app = await createServer(f.service, true);
+  const headers = {
+    authorization: `Bearer ${secret(f.root, "owner-token")}`,
+    "content-type": "application/json",
+  };
+  try {
+    const response = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/config",
+      headers,
+      payload: {
+        codebaseHosts: [...f.service.config.codebaseHosts],
+        agents: structuredClone(f.service.config.agents),
+      },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().data.application.state, "applied");
+    assert.equal(f.service.modelQueries, 0);
+    assert.equal(f.service.reloads, 1);
+    assert.ok(!response.body.includes("restartConnectorRequired"));
+    f.service.application = { state: "pending", activeOperations: 1 };
+    const pending = await app.inject({
+      method: "PATCH",
+      url: "/api/v1/config",
+      headers,
+      payload: { codebaseHosts: ["another.example.test"] },
+    });
+    assert.equal(pending.json().data.application.state, "pending");
+    assert.equal(pending.json().data.saved, true);
+    f.service.application = {
+      state: "failed",
+      error: "Synthetic connection unavailable",
+    };
+    assert.equal(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/v1/config/apply",
+          headers,
+          payload: {},
+        })
+      ).json().data.state,
+      "failed",
+    );
+    assert.equal((await app.inject("/api/v1/config/status")).statusCode, 401);
+    assert.equal(
+      (await app.inject({ url: "/api/v1/config/status", headers })).json().data
+        .state,
+      "failed",
+    );
+  } finally {
+    await app.close();
     f.cleanup();
   }
 });

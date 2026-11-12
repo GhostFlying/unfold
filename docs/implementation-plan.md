@@ -38,3 +38,11 @@ README must thank and link antfu/pulls.review (logical change grouping), cursor/
 ## Model and thinking effort configuration
 
 Expose model catalogs and supported reasoning efforts through the connector, owner API, CLI and UI. Each backend has global model/effort defaults. Each review may override backend, model and effort; removing overrides restores inheritance. Resolve and freeze these settings before each operation, validate them against the actual backend's model list, and record requested/effective settings on the run and explanation. Explicit model changes start a new private session while retaining prior questions as context. Never silently downgrade an unsupported effort or reuse a session with a different model profile.
+
+## Apply saved connector configuration automatically
+
+- Compare effective values so unchanged form fields never trigger a lifecycle warning.
+- All editable connection settings can be reloaded online because native app-server processes are per operation. Replace the manual restart requirement with authenticated connector reload/status RPCs; the web container does not receive host service-control privileges.
+- Apply an immutable connection-settings revision only while the connector is idle. Active investigations, execution approvals and platform writeback finish with their original runtime. Pending saved settings apply automatically when work drains; expose applied/pending/failed status through the owner API, CLI and settings dialog.
+- Validate changed native connections and expose readiness failures as saved-but-not-applied outcomes. New work must not silently use an older connection after a failed reload. Update managed authentication symlinks only at the idle boundary and preserve backend homes/history.
+- Add focused coverage for unchanged saves, real changes, deferred application, readiness failure, protected status endpoints and browser feedback. Deploy and verify the settings flow on the existing single-owner installation without replaying comments or approved execution.

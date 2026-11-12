@@ -10,6 +10,7 @@ import {
   secret,
   shareUrl,
   saveConfig,
+  settingsRevision,
 } from "./config.js";
 import {
   AppError,
@@ -21,6 +22,7 @@ import {
 } from "./types.js";
 import { equal } from "./util.js";
 import { parentCsp, exportHtml } from "./html.js";
+import { backendConnectionRevision } from "./connector-runtime.js";
 import { Service } from "./service.js";
 
 const backend = z.enum(["traex", "codex"]);
@@ -259,6 +261,12 @@ export async function createServer(service: Service, owner: boolean) {
         requireOwner(req);
     });
     app.get("/api/v1/config", async () => ok(service.config));
+    app.get("/api/v1/config/status", async () =>
+      ok(await service.configurationStatus()),
+    );
+    app.post("/api/v1/config/apply", async () =>
+      ok(await service.configurationStatus(true)),
+    );
     app.patch("/api/v1/config", async (req) => {
       const patch = z
         .object({
@@ -291,7 +299,13 @@ export async function createServer(service: Service, owner: boolean) {
       };
       if (patch.agents)
         for (const b of ["traex", "codex"] as const) {
-          if (patch.agents[b])
+          if (
+            patch.agents[b] &&
+            settingsRevision(patch.agents[b]) !==
+              settingsRevision(service.config.agents[b]) &&
+            backendConnectionRevision(next, b) ===
+              backendConnectionRevision(service.config, b)
+          )
             await service.rpc("models", {
               backend: b,
               profile: {
@@ -301,23 +315,15 @@ export async function createServer(service: Service, owner: boolean) {
             });
         }
       if (patch.shareBaseUrl) shareUrl(next, "configuration-check");
-      const restartConnectorRequired =
-        !!patch.codebaseHosts ||
-        (!!patch.agents &&
-          Object.entries(patch.agents).some(([b, a]) =>
-            ["executable", "authFile", "provider", "providerConfig"].some(
-              (key) =>
-                JSON.stringify((a as any)[key]) !==
-                JSON.stringify((service.config.agents as any)[b]?.[key]),
-            ),
-          ));
-      service.config = next;
       saveConfig(next);
+      service.config = next;
       return ok({
         config: next,
-        restartConnectorRequired,
+        saved: true,
+        application: await service.configurationStatus(true),
       });
     });
+
     app.get("/api/v1/agents/:backend/models", async (req) =>
       ok(
         await service.rpc("models", {

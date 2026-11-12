@@ -157,3 +157,71 @@ test("MR model and thinking effort overrides use the same persistent API as CLI"
     .selectOption("");
   await page.getByRole("button", { name: "保存 MR 设置", exact: true }).click();
 });
+
+test("saving unchanged settings confirms application without a manual connector restart", async ({
+  page,
+}) => {
+  await openOwner(page);
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("工作区设置");
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("配置已生效");
+  await expect(page.getByRole("dialog")).not.toContainText("请重启");
+  expect(errors).toEqual([]);
+});
+
+test("saved pending settings become applied automatically and readiness failures stay visible", async ({
+  page,
+}) => {
+  await openOwner(page);
+  const cfg = (await (await page.request.get("/api/v1/config")).json()).data;
+  let status = { state: "applied" };
+  await page.route("**/api/v1/config/status", (route) =>
+    route.fulfill({ json: { ok: true, data: status } }),
+  );
+  await page.route("**/api/v1/config", (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({
+          json: {
+            ok: true,
+            data: { saved: true, config: cfg, application: status },
+          },
+        })
+      : route.fallback(),
+  );
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("工作区设置");
+  status = { state: "pending" };
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "当前任务结束后自动生效",
+  );
+  status = { state: "applied" };
+  await expect(page.getByRole("status")).toContainText("配置已生效");
+  await page.unroute("**/api/v1/config");
+  await page.route("**/api/v1/config", (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({
+          json: {
+            ok: true,
+            data: {
+              saved: true,
+              config: cfg,
+              application: {
+                state: "failed",
+                error: "Synthetic readiness failure",
+              },
+            },
+          },
+        })
+      : route.fallback(),
+  );
+  await page.getByRole("button", { name: "保存设置", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("已保存，但应用失败");
+  await expect(page.getByRole("status")).toContainText(
+    "Synthetic readiness failure",
+  );
+  await expect(page.getByRole("button", { name: "重试应用" })).toBeVisible();
+});

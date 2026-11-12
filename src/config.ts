@@ -5,11 +5,13 @@ import {
   existsSync,
   chmodSync,
   realpathSync,
+  renameSync,
 } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { parse } from "smol-toml";
+import { hash } from "./util.js";
 import { AppError, type Backend } from "./types.js";
 export interface AgentConfig {
   executable: string;
@@ -122,9 +124,11 @@ export function saveConfig(config: Config) {
       else persisted[key] = previous[key];
     }
   }
-  writeFileSync(file, JSON.stringify(persisted, null, 2) + "\n", {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  writeFileSync(temporary, JSON.stringify(persisted, null, 2) + "\n", {
     mode: 0o600,
   });
+  renameSync(temporary, file);
 }
 export function shareUrl(
   config: Config,
@@ -167,4 +171,19 @@ export function installedCliRoot(executable = "bytedcli") {
     if (existsSync(p)) return path.dirname(realpathSync(p));
   }
   throw new AppError("cli_missing", `${executable} is not installed`, 503);
+}
+
+export function settingsRevision(value: unknown): string {
+  const sorted = (v: any): any =>
+    Array.isArray(v)
+      ? v.map(sorted)
+      : v && typeof v === "object"
+        ? Object.fromEntries(
+            Object.keys(v)
+              .filter((k) => v[k] !== undefined)
+              .sort()
+              .map((k) => [k, sorted(v[k])]),
+          )
+        : v;
+  return hash(sorted(value));
 }

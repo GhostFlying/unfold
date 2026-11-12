@@ -109,6 +109,7 @@ export interface Run {
   model?: string;
   effort?: string;
   requestedProfile?: ModelProfile;
+  connectionRevision?: string;
   cliVersion?: string;
   threadId?: string;
   question?: string;
@@ -170,4 +171,12 @@ export class AppError extends Error {
   ) {
     super(message);
   }
+}
+
+export interface ConfigApplication {
+  state: "applied" | "pending" | "applying" | "failed" | "unavailable";
+  desiredRevision?: string;
+  appliedRevision?: string;
+  activeOperations?: number;
+  error?: string;
 }
