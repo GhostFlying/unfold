@@ -346,8 +346,17 @@ agent
   .option("--effort <effort>")
   .option("--inherit-model")
   .option("--inherit-effort")
+  .option(
+    "--model-default-effort",
+    "Use this model's default effort for this MR",
+  )
   .action(
     wrap(async (review, o) => {
+      if (o.modelDefaultEffort && (o.effort || o.inheritEffort))
+        throw new AppError(
+          "invalid_input",
+          "Choose --effort, --inherit-effort or --model-default-effort",
+        );
       out(
         await api(`/reviews/${review}`, "PATCH", {
           backend: o.backend,
@@ -355,6 +364,7 @@ agent
             [o.backend]: {
               model: o.inheritModel ? null : o.model,
               effort: o.inheritEffort ? null : o.effort,
+              modelDefaultEffort: o.modelDefaultEffort || undefined,
             },
           },
         }),

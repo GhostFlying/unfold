@@ -465,38 +465,51 @@ pre {
   padding: 2px 6px;
 }
 .review-agent-controls {
-  margin: -6px 0 22px;
+  margin: -6px 0 20px;
   min-width: 0;
 }
 .review-agent-controls form {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 7px;
 }
 .review-agent-controls label {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
-  color: #85858b;
-  font-size: 10px;
+  color: #949498;
+  font-size: 11px;
+  height: 32px;
+  padding-left: 9px;
+  border: 1px solid #efefee;
+  border-radius: 6px;
+  background: #fafaf9;
 }
 .review-agent-controls select {
-  height: 34px;
-  padding: 5px 9px;
+  height: 30px;
+  padding: 3px 6px 3px 0;
   max-width: 100%;
   font-size: 12px;
-  border-color: #e9e9eb;
+  border: 0;
+  background: transparent;
+  text-overflow: ellipsis;
+  cursor: pointer;
 }
 .review-agent-controls .agent-model-control {
-  flex: 1;
-  max-width: 330px;
-  min-width: 140px;
+  max-width: 310px;
+}
+.review-agent-controls label > span {
+  flex-shrink: 0;
+}
+.review-agent-controls select:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 .review-agent-controls .primary {
-  height: 34px;
-  margin-left: auto;
+  height: 32px;
+  margin-left: 3px;
   font-size: 12px;
 }
 .agent-settings-feedback {
@@ -504,9 +517,14 @@ pre {
   align-items: baseline;
   flex-wrap: wrap;
   gap: 4px 10px;
-  margin-top: 6px;
   font-size: 11px;
   overflow-wrap: anywhere;
+}
+.agent-settings-feedback > :not(:empty) {
+  margin-top: 6px;
+}
+.agent-settings-feedback .hint:empty {
+  display: none;
 }
 .agent-settings-feedback .hint {
   font-size: 10px;
@@ -1470,16 +1488,15 @@ pre {
     margin-bottom: 18px;
   }
   .review-agent-controls form {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 8px 10px;
+    gap: 7px;
   }
   .review-agent-controls .agent-model-control {
     min-width: 0;
-    max-width: none;
+    max-width: 100%;
+    flex: 1 1 180px;
   }
   .review-agent-controls .primary {
-    width: 100%;
+    margin-left: 0;
   }
   .reader-tabs {
     gap: 23px;

@@ -287,7 +287,9 @@ export class Service {
         r.agentOverrides?.[backend]?.model ||
         this.config.agents[backend].model,
       effort:
-        options.effort === null
+        options.effort === null ||
+        (options.effort === undefined &&
+          r.agentOverrides?.[backend]?.modelDefaultEffort)
           ? undefined
           : options.effort ||
             r.agentOverrides?.[backend]?.effort ||

@@ -37,6 +37,81 @@ test("model metadata controls supported efforts without silent coercion", () => 
     () => resolveModelProfile(models, { model: "model-a", effort: "ultra" }),
     /does not advertise/,
   );
+  assert.deepEqual(
+    resolveModelProfile(
+      [
+        {
+          id: "plain",
+          model: "plain",
+          displayName: "Plain",
+          defaultEffort: "high",
+          efforts: [],
+        },
+      ],
+      {},
+    ),
+    { model: "plain", effort: undefined },
+  );
+});
+
+test("MR model-default effort bypasses inherited effort, persists across reads and applies to analysis and questions", async () => {
+  const f = fixture();
+  const { review } = await seed(f.service);
+  f.service.config.agents.traex.effort = "high";
+  const app = await createServer(f.service, true);
+  const headers = { authorization: `Bearer ${secret(f.root, "owner-token")}` };
+  const patch = (profile: unknown) =>
+    app.inject({
+      method: "PATCH",
+      url: `/api/v1/reviews/${review.id}`,
+      headers,
+      payload: { agentOverrides: { traex: profile } },
+    });
+  try {
+    for (const [model, expected] of [
+      ["fast-model", "low"],
+      ["plain-model", undefined],
+    ] as const) {
+      const saved = await patch({
+        model,
+        effort: null,
+        modelDefaultEffort: true,
+      });
+      assert.equal(saved.statusCode, 200, saved.body);
+      const settings = (
+        await app.inject({ url: `/api/v1/reviews/${review.id}/agent`, headers })
+      ).json().data;
+      assert.equal(settings.overrides.traex.modelDefaultEffort, true);
+      assert.equal(settings.profiles.traex.effort, undefined);
+      for (const kind of ["analyze", "questions"]) {
+        const response = await app.inject({
+          method: "POST",
+          url: `/api/v1/reviews/${review.id}/${kind}`,
+          headers,
+          payload: kind === "questions" ? { question: "Check" } : {},
+        });
+        assert.equal(response.statusCode, 200, response.body);
+        const run = response.json().data;
+        assert.equal(run.model, model);
+        assert.equal(run.effort, expected);
+        assert.equal(run.requestedProfile.effort, undefined);
+        await f.service.tasks.get(run.id);
+      }
+    }
+    assert.equal(
+      (await patch({ model: "test-model", effort: null })).statusCode,
+      200,
+    );
+    assert.equal(
+      f.service.review(review.id).agentOverrides?.traex?.modelDefaultEffort,
+      undefined,
+    );
+    assert.equal((await patch({ effort: "ultra" })).statusCode, 422);
+    assert.equal(f.service.config.agents.traex.effort, "high");
+  } finally {
+    await app.close();
+    f.cleanup();
+  }
 });
 
 test("global and review profiles inherit, clear independently, and reject unsupported effort atomically", async () => {

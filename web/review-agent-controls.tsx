@@ -3,6 +3,7 @@ import type {
   AgentModel,
   Backend,
   ModelProfile,
+  ReviewModelProfile,
   Review,
   Run,
 } from "../src/types.js";
@@ -11,7 +12,7 @@ import { api } from "./api.js";
 type Settings = {
   backend: Backend;
   backendOverride?: Backend;
-  overrides: Partial<Record<Backend, ModelProfile>>;
+  overrides: Partial<Record<Backend, ReviewModelProfile>>;
 };
 type Defaults = {
   defaultBackend: Backend;
@@ -20,7 +21,14 @@ type Defaults = {
 type SettingsPatch = {
   backend?: Backend | null;
   agentOverrides?: Partial<
-    Record<Backend, { model?: string | null; effort?: string | null }>
+    Record<
+      Backend,
+      {
+        model?: string | null;
+        effort?: string | null;
+        modelDefaultEffort?: boolean;
+      }
+    >
   >;
 };
 
@@ -51,6 +59,7 @@ export function ReviewAgentControls({
     [catalogAttempt, setCatalogAttempt] = useState(0);
   const [error, setError] = useState(""),
     [catalogError, setCatalogError] = useState("");
+  const [adjustment, setAdjustment] = useState("");
   const [pending, setPending] = useState<SettingsPatch>();
   const [saving, setSaving] = useState(false),
     [submitting, setSubmitting] = useState(false);
@@ -100,11 +109,18 @@ export function ReviewAgentControls({
   const model = requestedModel
     ? models.find((m) => m.model === requestedModel || m.id === requestedModel)
     : models.find((m) => m.isDefault) || models[0];
-  const effort = override.effort || inherited.effort;
+  const effort = override.modelDefaultEffort
+    ? undefined
+    : override.effort || inherited.effort;
+  const defaultEffort = model?.efforts.some(
+    (entry) => entry.effort === model.defaultEffort,
+  )
+    ? model.defaultEffort
+    : undefined;
   const valid =
     !!model && (!effort || model.efforts.some((e) => e.effort === effort));
   const blocked = saving || submitting || !!pending || !settings || !valid;
-  const locked = disabled || active || saving || submitting || !!pending;
+  const locked = disabled || active || saving || submitting;
   useEffect(() => {
     onPendingChange(blocked);
   }, [blocked, onPendingChange]);
@@ -124,32 +140,84 @@ export function ReviewAgentControls({
       setSaving(false);
     }
   }
-  function change(patch: SettingsPatch) {
+  async function change(patch: SettingsPatch) {
     if (!settings || !defaults || locked) return;
-    const overrides = { ...settings.overrides };
-    for (const [key, value] of Object.entries(patch.agentOverrides || {})) {
-      const b = key as Backend;
-      const next = { ...overrides[b] };
-      for (const field of ["model", "effort"] as const) {
-        if (value[field] === null) delete next[field];
-        else if (value[field] !== undefined) next[field] = value[field];
+    setError("");
+    setAdjustment("");
+    const nextBackend =
+      patch.backend !== undefined
+        ? patch.backend || defaults.defaultBackend
+        : settings.backend;
+    let available = models;
+    if (nextBackend !== backend) {
+      setSaving(true);
+      try {
+        available = (
+          await api<{ models: AgentModel[] }>(`/agents/${nextBackend}/models`)
+        ).models;
+      } catch (e: any) {
+        setError(`模型读取失败：${e.message}`);
+        setSaving(false);
+        return;
       }
-      overrides[b] = next;
     }
+    const overrides = { ...settings.overrides };
+    const profile = { ...overrides[nextBackend] };
+    const changes = patch.agentOverrides?.[nextBackend];
+    if (changes) {
+      for (const field of ["model", "effort"] as const) {
+        if (changes[field] === null) delete profile[field];
+        else if (changes[field] !== undefined) profile[field] = changes[field];
+      }
+      if (changes.effort !== undefined) delete profile.modelDefaultEffort;
+      if (changes.modelDefaultEffort) {
+        profile.modelDefaultEffort = true;
+        delete profile.effort;
+      } else if (changes.modelDefaultEffort === false)
+        delete profile.modelDefaultEffort;
+    }
+    const inheritedProfile = defaults.agents[nextBackend];
+    const wanted = profile.model || inheritedProfile.model;
+    const nextModel = wanted
+      ? available.find((entry) => entry.model === wanted || entry.id === wanted)
+      : available.find((entry) => entry.isDefault) || available[0];
+    const nextEffort = profile.modelDefaultEffort
+      ? undefined
+      : profile.effort || inheritedProfile.effort;
+    if (
+      nextModel &&
+      nextEffort &&
+      !nextModel.efforts.some((entry) => entry.effort === nextEffort)
+    ) {
+      delete profile.effort;
+      profile.modelDefaultEffort = true;
+      setAdjustment("已改用此模型的默认思考强度");
+    }
+    overrides[nextBackend] = profile;
     setSettings({
       ...settings,
+      backend: nextBackend,
       backendOverride:
         patch.backend !== undefined
           ? patch.backend || undefined
           : settings.backendOverride,
-      backend:
-        patch.backend !== undefined
-          ? patch.backend || defaults.defaultBackend
-          : settings.backend,
       overrides,
     });
-    setPending(patch);
-    void save(patch);
+    const complete: SettingsPatch = {
+      backend:
+        patch.backend !== undefined
+          ? patch.backend
+          : settings.backendOverride || null,
+      agentOverrides: {
+        [nextBackend]: {
+          model: profile.model || null,
+          effort: profile.effort || null,
+          modelDefaultEffort: !!profile.modelDefaultEffort,
+        },
+      },
+    };
+    setPending(complete);
+    await save(complete);
   }
 
   return (
@@ -175,7 +243,7 @@ export function ReviewAgentControls({
         }}
       >
         <label>
-          Agent
+          <span>Agent</span>
           <select
             aria-label="MR Agent"
             disabled={locked || !settings}
@@ -185,45 +253,35 @@ export function ReviewAgentControls({
             }
           >
             <option value="">
-              继承全局 · {defaults?.defaultBackend || "读取中…"}
+              {defaults
+                ? `${defaults.defaultBackend === "codex" ? "Codex" : "TraeX"} · 全局`
+                : "读取中…"}
             </option>
             <option value="traex">TraeX</option>
             <option value="codex">Codex</option>
           </select>
         </label>
         <label className="agent-model-control">
-          模型
+          <span>模型</span>
           <select
             aria-label="MR 模型"
             disabled={locked || !models.length}
             value={override.model || ""}
-            onChange={(e) => {
-              const value = e.target.value;
-              const targetModel = value || inherited.model;
-              const nextModel = targetModel
-                ? models.find(
-                    (m) => m.model === targetModel || m.id === targetModel,
-                  )
-                : models.find((m) => m.isDefault) || models[0];
-              change({
+            title={requestedModel || model?.displayName}
+            onChange={(e) =>
+              void change({
                 agentOverrides: {
-                  [backend!]: {
-                    model: value || null,
-                    ...(!effort ||
-                    nextModel?.efforts.some((entry) => entry.effort === effort)
-                      ? {}
-                      : { effort: nextModel?.defaultEffort || null }),
-                  },
+                  [backend!]: { model: e.target.value || null },
                 },
-              });
-            }}
+              })
+            }
           >
             <option value="">
               {!models.length
                 ? "正在读取模型…"
                 : inherited.model
-                  ? `继承全局 · ${inherited.model}`
-                  : `后端默认 · ${models.find((m) => m.isDefault)?.displayName || models[0]?.displayName}`}
+                  ? `${inherited.model} · 全局`
+                  : `${models.find((m) => m.isDefault)?.displayName || models[0]?.displayName} · 默认`}
             </option>
             {override.model && !model && models.length ? (
               <option value={override.model}>
@@ -238,28 +296,43 @@ export function ReviewAgentControls({
           </select>
         </label>
         <label>
-          Thinking effort
+          <span>思考</span>
           <select
             aria-label="MR thinking effort"
             disabled={locked || !model}
-            value={override.effort || ""}
+            value={
+              override.modelDefaultEffort
+                ? "model-default"
+                : override.effort || ""
+            }
             onChange={(e) =>
-              change({
+              void change({
                 agentOverrides: {
-                  [backend!]: { effort: e.target.value || null },
+                  [backend!]: {
+                    effort:
+                      e.target.value === "model-default"
+                        ? null
+                        : e.target.value || null,
+                    modelDefaultEffort: e.target.value === "model-default",
+                  },
                 },
               })
             }
           >
             <option value="">
               {inherited.effort
-                ? `继承全局 · ${inherited.effort}`
-                : `模型默认${model?.defaultEffort ? ` · ${model.defaultEffort}` : ""}`}
+                ? `${inherited.effort} · 全局`
+                : `默认${defaultEffort ? ` · ${defaultEffort}` : ""}`}
+            </option>
+            <option value="model-default">
+              默认{defaultEffort ? ` · ${defaultEffort}` : ""}
             </option>
             {override.effort &&
-            !model?.efforts.some((e) => e.effort === override.effort) ? (
+            !model?.efforts.some(
+              (entry) => entry.effort === override.effort,
+            ) ? (
               <option value={override.effort}>
-                {override.effort}（当前不可用）
+                {override.effort}（不支持）
               </option>
             ) : null}
             {model?.efforts.map((e) => (
@@ -287,12 +360,14 @@ export function ReviewAgentControls({
             : pending
               ? "设置尚未保存"
               : settings
-                ? "自动保存 · 用于此 MR 的后续讲解与追问"
+                ? adjustment
                 : "正在读取 MR 设置…"}
         </span>
-        {error ? (
+        {error || catalogError || (models.length > 0 && !valid) ? (
           <span className="error" role="alert">
-            {error}
+            {error ||
+              catalogError ||
+              "请选择此模型支持的思考强度，或使用默认值。"}
           </span>
         ) : null}
         {pending && !saving ? (
@@ -335,11 +410,6 @@ export function ReviewAgentControls({
             重新读取设置
           </button>
         ) : null}
-        {catalogError ? (
-          <span className="error" role="alert">
-            模型读取失败：{catalogError}
-          </span>
-        ) : null}
         {catalogError || (catalog && !models.length) ? (
           <button
             className="text-button"
@@ -347,11 +417,6 @@ export function ReviewAgentControls({
           >
             重新读取模型
           </button>
-        ) : null}
-        {models.length > 0 && !valid ? (
-          <span className="error" role="alert">
-            当前模型或 effort 不可用，请重新选择。
-          </span>
         ) : null}
       </div>
     </section>

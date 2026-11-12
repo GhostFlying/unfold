@@ -39,7 +39,14 @@ const send=m=>console.log(JSON.stringify(m));
 const note=(method,params)=>send({method,params:{threadId:'thread',turnId:'turn',...params}});
 createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line);if(m.id===undefined)return;let result={};
 if(m.method==='account/read')result={account:{type:'synthetic-owner'}};
+if(m.method==='model/list')result={data:[{id:'plain-model',model:'plain-model',displayName:'Plain',isDefault:true,defaultReasoningEffort:'high',supportedReasoningEfforts:[]}]};
 if(m.method==='thread/start'||m.method==='thread/resume'){baseline=m.method==='thread/resume'?1000:0;result={thread:{id:'thread'},model:'test-model'};}
+if(m.method==='thread/start'||m.method==='thread/resume'){
+ assert.equal(m.params.config.model_reasoning_effort,undefined);
+ const home=process.env.CODEX_HOME||process.env.TRAE_HOME;
+ const configFile=require('node:path').join(__filename.includes('traex')?process.env.TRAE_HOME:process.env.CODEX_HOME,__filename.includes('traex')?'traecli.toml':'config.toml');
+ assert.ok(!require('node:fs').readFileSync(configFile,'utf8').includes('model_reasoning_effort'));
+}
 if(m.method==='thread/read')result={thread:{id:'thread'}};
 if(m.method==='turn/start'){
  try {
@@ -51,6 +58,7 @@ if(m.method==='turn/start'){
   assert.ok(text.includes('question":"Check"'));
   assert.ok(text.includes('JSON schema'));
   assert.equal(m.params.approvalPolicy,'never');
+  assert.equal(m.params.effort,undefined);
   assert.deepEqual(m.params.outputSchema.required,['answer']);
  }catch(error){send({id:m.id,error:{code:-32602,message:error.message}});return;}
  result={turn:{id:'turn'}};
@@ -81,8 +89,12 @@ for (const backend of ["codex", "traex"] as Backend[])
       await writeFile(executable, peer, { mode: 0o700 });
       await writeFile(authFile, "{}");
       const config = testConfig(root);
-      config.agents[backend] = { executable, authFile };
+      config.agents[backend] = { executable, authFile, effort: "high" };
       const host = new AgentHost(config, root, new Providers(config));
+      const catalog = await host.catalog(backend);
+      assert.ok("models" in catalog);
+      if ("models" in catalog)
+        assert.equal(catalog.models[0].defaultEffort, undefined);
       for (const threadId of [undefined, "thread"]) {
         const events: AgentEvent[] = [];
         await host.run(
@@ -93,6 +105,7 @@ for (const backend of ["codex", "traex"] as Backend[])
             kind: "question",
             question: "Check",
             threadId,
+            profile: { model: "plain-model" },
           },
           (e) => events.push(e),
           new AbortController().signal,

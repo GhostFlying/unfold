@@ -118,6 +118,13 @@ export class FakeService extends Service {
             { effort: "high", description: "More reasoning" },
           ],
         },
+        {
+          id: "plain-model",
+          model: "plain-model",
+          displayName: "Plain Model",
+          defaultEffort: "high",
+          efforts: [],
+        },
       ];
       if (!p.profile) data = { backend: p.backend, models };
       else {

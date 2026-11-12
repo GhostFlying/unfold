@@ -88,7 +88,7 @@ export class AgentHost {
     p.resolve(approve);
     return { accepted: true };
   }
-  private async runtime(backend: Backend) {
+  private async runtime(backend: Backend, profile?: ModelProfile) {
     const cfg = this.config.agents[backend],
       home = path.join(this.root, "agents", backend),
       cwd = path.join(home, "workspace");
@@ -124,8 +124,10 @@ export class AgentHost {
       hooks: {},
       mcp_servers: {},
     };
-    if (cfg.model) safeConfig.model = cfg.model;
-    if (cfg.effort) safeConfig.model_reasoning_effort = cfg.effort;
+    const effectiveProfile = profile || cfg;
+    if (effectiveProfile.model) safeConfig.model = effectiveProfile.model;
+    if (effectiveProfile.effort)
+      safeConfig.model_reasoning_effort = effectiveProfile.effort;
     if (cfg.providerConfig && cfg.provider)
       safeConfig.model_providers = { [cfg.provider]: cfg.providerConfig };
     writeFileSync(
@@ -161,7 +163,11 @@ export class AgentHost {
           model: m.model,
           isDefault: m.isDefault,
           displayName: m.displayName || m.model,
-          defaultEffort: m.defaultReasoningEffort,
+          defaultEffort: (m.supportedReasoningEfforts || []).some(
+            (e: any) => e.reasoningEffort === m.defaultReasoningEffort,
+          )
+            ? m.defaultReasoningEffort
+            : undefined,
           efforts: (m.supportedReasoningEfforts || []).map((e: any) => ({
             effort: e.reasoningEffort,
             description: e.description || "",
@@ -176,7 +182,8 @@ export class AgentHost {
     profile?: ModelProfile,
     checkAccount = false,
   ) {
-    const { cfg, home, env } = await this.runtime(backend);
+    // Catalog reads must not write a global effort back into a run's isolated home.
+    const { cfg, home, env } = await this.runtime(backend, {});
     const native = new NativeRpc(
       cfg.executable,
       env,
@@ -214,10 +221,8 @@ export class AgentHost {
     });
     const { cfg, home, cwd, safeConfig, cliVersion, env } = await this.runtime(
       params.backend,
+      params.profile,
     );
-    if (params.profile?.model) safeConfig.model = params.profile.model;
-    if (params.profile?.effort)
-      safeConfig.model_reasoning_effort = params.profile.effort;
     // No reviewed checkout or inherited tools are exposed as an Environment.
     // Only the version-bound host functions below receive repository material.
     const native = new NativeRpc(
@@ -924,7 +929,11 @@ export function resolveModelProfile(
       422,
       { requested: profile.model, models: models.map((m) => m.model) },
     );
-  const effort = profile.effort || model.defaultEffort;
+  const effort =
+    profile.effort ||
+    (model.efforts.some((e) => e.effort === model.defaultEffort)
+      ? model.defaultEffort
+      : undefined);
   if (effort && !model.efforts.some((e) => e.effort === effort))
     throw new AppError(
       "unsupported_effort",

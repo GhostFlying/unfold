@@ -292,7 +292,7 @@ test("visible MR dropdowns feed direct regeneration, retain failures, and leave 
     await controls.getByLabel("MR 模型").selectOption("fast-model");
     await expect(controls.getByLabel("MR thinking effort")).toBeEnabled();
     await expect(controls.getByLabel("MR thinking effort")).toContainText(
-      "模型默认 · low",
+      "默认 · low",
     );
     await expect(
       controls
@@ -404,7 +404,7 @@ test("inline model catalog failures recover without a generation dialog", async 
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });
 
-test("failed automatic MR saves block analysis until the exact selection is saved", async ({
+test("failed automatic MR saves keep controls editable and save corrections", async ({
   page,
 }) => {
   await openOwner(page);
@@ -448,7 +448,9 @@ test("failed automatic MR saves block analysis until the exact selection is save
       await (await page.request.get(`/api/v1/reviews/${reviewId}/agent`)).json()
     ).data;
     expect(original.overrides.traex?.effort).toBeUndefined();
-    await controls.getByRole("button", { name: "重试保存" }).click();
+    await expect(controls.getByLabel("MR thinking effort")).toBeEnabled();
+    await expect(controls.getByLabel("MR 模型")).toBeEnabled();
+    await controls.getByLabel("MR thinking effort").selectOption("medium");
     await expect(controls.getByRole("alert")).toHaveCount(0);
     await expect(
       controls.getByRole("button", { name: "重新讲解" }),
@@ -456,11 +458,106 @@ test("failed automatic MR saves block analysis until the exact selection is save
     const saved = (
       await (await page.request.get(`/api/v1/reviews/${reviewId}/agent`)).json()
     ).data;
-    expect(saved.overrides.traex.effort).toBe("high");
+    expect(saved.overrides.traex.effort).toBe("medium");
   } finally {
     releaseSave();
     await page.request.patch(`/api/v1/reviews/${reviewId}`, {
       data: { agentOverrides: { traex: { effort: null } } },
+    });
+  }
+});
+
+test("model changes replace incompatible inherited effort with a persisted model default, including no-effort models", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await openOwner(page);
+  const reviewId = new URL(page.url()).pathname.split("/")[2];
+  const config = (await (await page.request.get("/api/v1/config")).json()).data;
+  const controls = page.getByRole("region", { name: "当前 MR 的 Agent 设置" });
+  try {
+    for (const [model, inherited, expectedDefault] of [
+      ["plain-model", "high", "默认"],
+      ["fast-model", "medium", "默认 · low"],
+    ]) {
+      const base = await page.request.patch(`/api/v1/reviews/${reviewId}`, {
+        data: {
+          backend: "traex",
+          agentOverrides: {
+            traex: {
+              model: "test-model",
+              effort: null,
+              modelDefaultEffort: false,
+            },
+          },
+        },
+      });
+      expect(base.ok()).toBe(true);
+      const cfg = await page.request.patch("/api/v1/config", {
+        data: {
+          agents: { traex: { ...config.agents.traex, effort: inherited } },
+        },
+      });
+      expect(cfg.ok()).toBe(true);
+      await page.reload();
+      await expect(controls.getByLabel("MR 模型")).toBeEnabled();
+      await expect(controls.getByLabel("MR thinking effort")).toHaveValue("");
+      await controls.getByLabel("MR 模型").selectOption(model);
+      await expect(
+        controls.getByRole("button", { name: "重新讲解" }),
+      ).toBeEnabled();
+      await expect(controls.getByLabel("MR thinking effort")).toBeEnabled();
+      await expect(controls.getByLabel("MR thinking effort")).toHaveValue(
+        "model-default",
+      );
+      await expect(
+        controls.getByLabel("MR thinking effort").locator("option:checked"),
+      ).toHaveText(expectedDefault);
+      await expect(controls.getByRole("alert")).toHaveCount(0);
+      await expect(controls.getByRole("status")).toContainText("已改用此模型");
+      const saved = (
+        await (
+          await page.request.get(`/api/v1/reviews/${reviewId}/agent`)
+        ).json()
+      ).data;
+      expect(saved.overrides.traex).toEqual({
+        model,
+        modelDefaultEffort: true,
+      });
+      expect(saved.profiles.traex.effort).toBeUndefined();
+      await page.reload();
+      await expect(
+        controls.getByRole("button", { name: "重新讲解" }),
+      ).toBeEnabled();
+      await expect(controls.getByLabel("MR thinking effort")).toHaveValue(
+        "model-default",
+      );
+    }
+    await page.screenshot({ path: "/tmp/unfold-compact-agent-desktop.png" });
+    await controls.screenshot({
+      path: "/tmp/unfold-compact-agent-toolbar.png",
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth > innerWidth,
+      ),
+    ).toBe(false);
+    await expect(
+      controls.getByRole("button", { name: "重新讲解" }),
+    ).toBeInViewport();
+    await page.screenshot({ path: "/tmp/unfold-compact-agent-mobile.png" });
+    expect(errors).toEqual([]);
+  } finally {
+    await page.request.patch("/api/v1/config", {
+      data: { agents: { traex: config.agents.traex } },
+    });
+    await page.request.patch(`/api/v1/reviews/${reviewId}`, {
+      data: {
+        backend: null,
+        agentOverrides: { traex: { model: null, effort: null } },
+      },
     });
   }
 });

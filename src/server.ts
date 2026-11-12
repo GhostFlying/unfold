@@ -29,6 +29,7 @@ const backend = z.enum(["traex", "codex"]);
 const modelProfile = z.object({
   model: z.string().trim().min(1).max(200).nullable().optional(),
   effort: z.string().trim().min(1).max(50).nullable().optional(),
+  modelDefaultEffort: z.boolean().optional(),
 });
 const runProfile = z.object({
   backend: backend.optional(),
@@ -376,9 +377,10 @@ export async function createServer(service: Service, owner: boolean) {
               model:
                 review.agentOverrides?.[b]?.model ||
                 service.config.agents[b].model,
-              effort:
-                review.agentOverrides?.[b]?.effort ||
-                service.config.agents[b].effort,
+              effort: review.agentOverrides?.[b]?.modelDefaultEffort
+                ? undefined
+                : review.agentOverrides?.[b]?.effort ||
+                  service.config.agents[b].effort,
             },
           ]),
         ),
@@ -418,11 +420,20 @@ export async function createServer(service: Service, owner: boolean) {
             if (patch[field] === null) delete next[field];
             else if (patch[field] !== undefined) next[field] = patch[field];
           }
+          if (patch.effort !== undefined) delete next.modelDefaultEffort;
+          if (patch.modelDefaultEffort === true) {
+            next.modelDefaultEffort = true;
+            delete next.effort;
+          } else if (patch.modelDefaultEffort === false) {
+            delete next.modelDefaultEffort;
+          }
           await service.rpc("models", {
             backend: bkey,
             profile: {
               model: next.model || service.config.agents[bkey].model,
-              effort: next.effort || service.config.agents[bkey].effort,
+              effort: next.modelDefaultEffort
+                ? undefined
+                : next.effort || service.config.agents[bkey].effort,
             },
           });
           r.agentOverrides[bkey] = next;

@@ -108,6 +108,44 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
     );
     assert.equal(conflict.exit, 2);
     assert.equal(JSON.parse(conflict.stderr).error.code, "invalid_input");
+    const persistent = await cli(
+      [
+        "--server",
+        `http://127.0.0.1:${port}`,
+        "agent",
+        "set",
+        "review-id",
+        "--backend",
+        "traex",
+        "--model",
+        "plain-model",
+        "--model-default-effort",
+      ],
+      root,
+    );
+    assert.equal(persistent.exit, 0, persistent.stderr);
+    assert.deepEqual(JSON.parse(persistent.stdout).data.body, {
+      backend: "traex",
+      agentOverrides: {
+        traex: { model: "plain-model", modelDefaultEffort: true },
+      },
+    });
+    for (const flag of ["--inherit-effort", "--effort"]) {
+      const invalid = await cli(
+        [
+          "agent",
+          "set",
+          "review-id",
+          "--backend",
+          "traex",
+          "--model-default-effort",
+          flag,
+          ...(flag === "--effort" ? ["high"] : []),
+        ],
+        root,
+      );
+      assert.equal(invalid.exit, 2);
+    }
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     await rm(root, { recursive: true, force: true });

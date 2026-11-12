@@ -3,6 +3,9 @@ export interface ModelProfile {
   model?: string;
   effort?: string;
 }
+export interface ReviewModelProfile extends ModelProfile {
+  modelDefaultEffort?: boolean;
+}
 export interface AgentModel {
   id: string;
   model: string;
@@ -60,7 +63,7 @@ export interface Review {
   title: string;
   backend: Backend;
   backendOverride?: Backend;
-  agentOverrides?: Partial<Record<Backend, ModelProfile>>;
+  agentOverrides?: Partial<Record<Backend, ReviewModelProfile>>;
   versionId: string;
   explanationId?: string;
   createdAt: string;
