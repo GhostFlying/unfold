@@ -64,3 +64,10 @@ Expose model catalogs and supported reasoning efforts through the connector, own
 - New native analyses produce a small structured guide alongside the self-contained whole-change HTML. Validate group/point bounds and reference IDs against actual pinned source reads; untrusted output never becomes executable host UI.
 - Persist the structured guide with explanation metadata, expose it in read-only shared APIs and an explicit CLI command, and keep full HTML in its artifact file. Historical explanations without a guide remain readable with an honest empty state; do not invent categories from file names or silently reanalyze them.
 - Match the existing restrained reader, provide keyboard/mobile navigation and source jumps, and acknowledge pulls.review for the grouping interaction without copying its platform or source.
+
+## Plain-language generation with chineseplz
+
+- Vendor the MIT-licensed `write-plain-chinese` skill from M0gician/chineseplz at pinned commit `8993f98573f0cd0a8d2053741006bc38d4972b75`, retaining its original runtime documents, license, file hashes and attribution. Do not install into the owner's personal skills or enable inherited plugins/hooks/tools.
+- Include its fourteen writing rules and two terminology/example references in every native analysis/question turn on both backends, including resumed conversations. Apply them to human-readable prose while preserving facts, uncertainty, code, identifiers, references, JSON contracts and sandbox boundaries. Return the requested analysis or answer, with editing reports only when the task requests them.
+- Generate and polish within the same analysis turn. CLI analyze/ask and Web use the same policy; record its identity and effective text hash with the run and explanation so the existing CLI read commands can inspect it.
+- Bundle the text with compiled connector assets; generation must not fetch external instructions at runtime. Verify fresh/resumed native requests, production asset packaging and a real rewrite on both backends. Deploy after active work finishes, without regenerating existing explanations.

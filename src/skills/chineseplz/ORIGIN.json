@@ -1,0 +1,17 @@
+{
+  "name": "write-plain-chinese",
+  "repository": "https://github.com/M0gician/chineseplz",
+  "commit": "8993f98573f0cd0a8d2053741006bc38d4972b75",
+  "license": "MIT",
+  "files": {
+    "SKILL.md": "9170facb045a6928d11638d384ff851c59cc298bf4339005fa4308eac5478b03",
+    "references/original-examples.md": "cbb7f290e700c82ba6cbbdf31f2ef414430850502986c5440c37a39579b39100",
+    "references/terminology-examples.md": "7a01429a512842cf0c9cd3f6a158ef602d8573b1308b0dc2ab1c11a7ba0f9508",
+    "LICENSE": "139b2fd00833d7c2cad8d71c0ad0cd6f0524656a69f244fefef6111798af8309"
+  },
+  "injected": [
+    "SKILL.md",
+    "references/original-examples.md",
+    "references/terminology-examples.md"
+  ]
+}

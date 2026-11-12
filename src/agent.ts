@@ -41,6 +41,7 @@ import { executeApproved } from "./execution.js";
 import { UsageTracker } from "./telemetry.js";
 import { guideSchema, validateGuide } from "./guide.js";
 import { nativeUsageBaseline } from "./native-usage.js";
+import { withWritingStyle, writingStyle } from "./writing-style.js";
 
 export interface AgentParams {
   runId: string;
@@ -652,6 +653,7 @@ export class AgentHost {
       }
       emit({
         type: "identity",
+        writingStyle,
         threadId,
         model:
           thread.model ||
@@ -701,7 +703,7 @@ export class AgentHost {
         threadId,
         environments: [],
         approvalPolicy: "never",
-        input: [{ type: "text", text: prompt }],
+        input: [{ type: "text", text: withWritingStyle(prompt) }],
         outputSchema: schema,
         model: params.profile?.model,
         effort: params.profile?.effort,

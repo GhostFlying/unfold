@@ -5,6 +5,7 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY tsconfig*.json vite.config.ts ./
 COPY src ./src
+COPY scripts/copy-skills.mjs ./scripts/copy-skills.mjs
 COPY web ./web
 RUN pnpm build && pnpm prune --prod
 

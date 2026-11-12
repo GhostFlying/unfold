@@ -35,6 +35,8 @@ The **改动导览** view organizes new analyses into logical groups and individ
 
 New investigations show public agent progress, current source activity, elapsed time and per-run token usage in the owner UI. Progress and usage survive refreshes and restarts; CLI agents can inspect `unfold run RUN --json` or observe `unfold watch RUN`. Full explanation HTML lives in an artifact file, while SQLite stores metadata and its relative path. Back up `.local/data/` as a whole, including the database and artifacts.
 
+New analyses and private answers use the bundled [chineseplz](https://github.com/M0gician/chineseplz) `write-plain-chinese` skill, including progress messages and logical change guides. Its rules favor concrete, direct Chinese while preserving technical terms, facts and uncertainty. Both backends receive the same pinned text on every turn, including resumed conversations; CLI and Web share this behavior. Writing rules apply within the existing generation, and old explanations stay unchanged. Runs and explanations retain the skill revision and effective instruction hash in `writingStyle` metadata.
+
 ## Codebase first
 
 ```sh
@@ -104,8 +106,9 @@ Tests use synthetic source and platform responses. They do not count as real bac
 - [antfu/pulls.review](https://github.com/antfu/pulls.review): logical grouping of changes, reviewer-oriented reading, and the restrained source-reading interface that inspired Unfold's visual direction.
 - [cursor/plugins — PR Review Canvas](https://github.com/cursor/plugins/tree/main/pr-review-canvas): explanations organized around core behavior, execution paths, concrete before/after examples, and review risks.
 - [nicobailon/visual-explainer](https://github.com/nicobailon/visual-explainer): expressive, self-contained technical explanations using HTML, diagrams and useful interaction.
+- [M0gician/chineseplz](https://github.com/M0gician/chineseplz): direct, precise Chinese for explanations, change points, progress and private answers. Unfold bundles its original skill and example documents at commit `8993f98573f0cd0a8d2053741006bc38d4972b75` under MIT, with its [license](src/skills/chineseplz/LICENSE) and [source manifest](src/skills/chineseplz/ORIGIN.json).
 
-Thank you to their authors and contributors. These projects informed the approach; Unfold does not bundle their platforms or agent frameworks. The initial implementation is original code rather than copied renderer or application code. Any future code reuse must retain its upstream license and attribution.
+Thank you to their authors and contributors. Unfold's application and renderer code are original; the bundled chineseplz writing documents retain their upstream MIT license and attribution. The reference projects' platforms and agent frameworks are not bundled. Any future code reuse must retain its upstream license and attribution.
 
 Unfold is available under the [MIT license](LICENSE).
 

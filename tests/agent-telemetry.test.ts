@@ -8,6 +8,7 @@ import { Providers } from "../src/providers.js";
 import { testConfig, snapshot } from "./fixtures.js";
 import type { AgentEvent, Backend } from "../src/types.js";
 import { structuredReply } from "../src/util.js";
+import { writingStyle } from "../src/writing-style.js";
 test("merged commentary accepts only a complete trailing JSON object and preserves HTML braces", () => {
   const output = {
     html: "<style>body { color: red; }</style>",
@@ -30,6 +31,7 @@ test("merged commentary accepts only a complete trailing JSON object and preserv
 });
 const peer = `#!/usr/bin/env node
 const {createInterface}=require('node:readline');
+const assert=require('node:assert/strict');
 if(process.argv.includes('--version')){console.log('synthetic-agent 1');process.exit(0)}
 const counts=n=>({inputTokens:n,cachedInputTokens:n/2,outputTokens:n/10,reasoningOutputTokens:n/20,totalTokens:n+n/10});
 let baseline=0;
@@ -39,7 +41,20 @@ createInterface({input:process.stdin}).on('line',line=>{const m=JSON.parse(line)
 if(m.method==='account/read')result={account:{type:'synthetic-owner'}};
 if(m.method==='thread/start'||m.method==='thread/resume'){baseline=m.method==='thread/resume'?1000:0;result={thread:{id:'thread'},model:'test-model'};}
 if(m.method==='thread/read')result={thread:{id:'thread'}};
-if(m.method==='turn/start')result={turn:{id:'turn'}};
+if(m.method==='turn/start'){
+ try {
+  const text=m.params.input[0].text;
+  assert.ok(text.includes('name: write-plain-chinese'));
+  assert.ok(text.includes('## 规则 14：完整回答当前问题，信息充分时结束'));
+  assert.ok(text.includes('# 原有术语与改写示例'));
+  assert.ok(text.includes('# 术语解释与新增示例'));
+  assert.ok(text.includes('question":"Check"'));
+  assert.ok(text.includes('JSON schema'));
+  assert.equal(m.params.approvalPolicy,'never');
+  assert.deepEqual(m.params.outputSchema.required,['answer']);
+ }catch(error){send({id:m.id,error:{code:-32602,message:error.message}});return;}
+ result={turn:{id:'turn'}};
+}
 send({id:m.id,result});
 if(m.method==='thread/resume')note('thread/tokenUsage/updated',{turnId:'previous',tokenUsage:{total:counts(baseline)}});
 if(m.method==='turn/start'){
@@ -94,6 +109,10 @@ for (const backend of ["codex", "traex"] as Backend[])
         assert.ok(!JSON.stringify(events).includes("PRIVATE REASONING"));
         assert.ok(!JSON.stringify(events).includes("PRIVATE PARTIAL JSON"));
         assert.equal(events.at(-1)?.type, "result");
+        assert.deepEqual(
+          events.find((e) => e.type === "identity")?.writingStyle,
+          writingStyle,
+        );
         assert.ok(
           events
             .filter((e) => e.type === "status")

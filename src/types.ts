@@ -92,6 +92,7 @@ export interface Explanation {
   html: string;
   references: Reference[];
   guide?: ChangeGuide;
+  writingStyle?: WritingStyle;
   backend: Backend;
   model: string;
   effort?: string;
@@ -140,6 +141,7 @@ export interface Run {
   activity?: RunProgress[];
   usage?: RunUsage;
   usageUnavailableReason?: string;
+  writingStyle?: WritingStyle;
   question?: string;
   context?: Reference;
   explanationId?: string;
@@ -147,6 +149,12 @@ export interface Run {
   error?: string;
   createdAt: string;
   finishedAt?: string;
+}
+export interface WritingStyle {
+  name: string;
+  source: string;
+  revision: string;
+  sha256: string;
 }
 export interface RunProgress {
   stage:

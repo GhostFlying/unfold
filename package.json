@@ -15,7 +15,7 @@
     "dev": "tsx src/cli.ts serve",
     "connector": "tsx src/cli.ts connector",
     "web:dev": "vite --host 127.0.0.1",
-    "build": "vite build && tsc -p tsconfig.server.json",
+    "build": "vite build && tsc -p tsconfig.server.json && node scripts/copy-skills.mjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts",
     "test:e2e": "playwright test",

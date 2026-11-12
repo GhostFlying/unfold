@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { UsageTracker, tokenCounts } from "../src/telemetry.js";
 import { fixture, seed } from "./fixtures.js";
 import { Store } from "../src/store.js";
-import type { AgentEvent, Run } from "../src/types.js";
+import type { AgentEvent, Explanation, Run } from "../src/types.js";
+import { writingStyle } from "../src/writing-style.js";
 import { readFileSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import http from "node:http";
@@ -100,9 +101,10 @@ test("progress and observed usage survive a service restart, including cancelled
   }
 });
 
-test("streamed usage and progress survive successful and failed terminal writes", async () => {
+test("streamed usage, progress and writing policy survive terminal writes and store reopening", async () => {
   const f = fixture();
   let fail = false;
+  let artifact: Explanation | undefined;
   const server = http.createServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/x-ndjson" });
     const events = [
@@ -112,6 +114,7 @@ test("streamed usage and progress survive successful and failed terminal writes"
         model: "test-model",
         effort: "medium",
         cliVersion: "synthetic 1",
+        writingStyle,
       },
       { type: "turn", turnId: "synthetic-turn" },
       { type: "usage", usage: counts(2000) },
@@ -130,6 +133,7 @@ test("streamed usage and progress survive successful and failed terminal writes"
             effort: "medium",
             cliVersion: "synthetic 1",
             references: [],
+            artifact,
           },
     ];
     res.end(events.map((e) => JSON.stringify(e)).join("\n") + "\n");
@@ -138,20 +142,47 @@ test("streamed usage and progress survive successful and failed terminal writes"
     server.listen(f.service.config.socketPath, resolve),
   );
   try {
-    const { review } = await seed(f.service);
-    for (const failure of [false, true]) {
+    const { review, explanation } = await seed(f.service);
+    artifact = explanation;
+    const ids: string[] = [];
+    for (const [kind, failure] of [
+      ["question", false],
+      ["question", true],
+      ["analysis", false],
+    ] as const) {
       fail = failure;
-      const run = await f.service.startRun(review.id, "question", {
+      const run = await f.service.startRun(review.id, kind, {
         question: "Synthetic private question",
       });
+      ids.push(run.id);
       await f.service.tasks.get(run.id);
       const saved = f.service.store.get<Run>("run", run.id);
       assert.equal(saved.state, failure ? "failed" : "succeeded");
       assert.equal(saved.usage?.totalTokens, 2020);
       assert.equal(saved.progress?.message, "Validating the answer");
       assert.equal(saved.turnId, "synthetic-turn");
+      assert.deepEqual(saved.writingStyle, writingStyle);
+      if (kind === "analysis")
+        assert.deepEqual(
+          f.service.store.get<Explanation>("explanation", saved.explanationId!)
+            .writingStyle,
+          writingStyle,
+        );
       assert.equal(f.service.store.events(run.id).at(-1)?.type, "finished");
     }
+    f.service.store.close();
+    f.service.store = new Store(f.service.config.dataDir);
+    for (const id of ids)
+      assert.deepEqual(
+        f.service.store.get<Run>("run", id).writingStyle,
+        writingStyle,
+      );
+    const analysis = f.service.store.get<Run>("run", ids.at(-1)!);
+    assert.deepEqual(
+      f.service.store.get<Explanation>("explanation", analysis.explanationId!)
+        .writingStyle,
+      writingStyle,
+    );
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
     f.cleanup();

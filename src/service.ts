@@ -387,6 +387,7 @@ export class Service {
             run.model = event.model as string;
             run.effort = event.effort as string | undefined;
             run.cliVersion = event.cliVersion as string;
+            run.writingStyle = event.writingStyle as Run["writingStyle"];
             this.store.put("run", run);
           } else if (event.type === "source") {
             this.store.put("source", event.source as Source);
@@ -446,6 +447,7 @@ export class Service {
                 effort: run.effort,
                 cliVersion: run.cliVersion,
                 threadId: run.threadId,
+                writingStyle: run.writingStyle,
                 createdAt: now(),
               };
               this.store.put("explanation", e);
