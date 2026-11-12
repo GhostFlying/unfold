@@ -1,4 +1,4 @@
-# Phase one acceptance
+# Acceptance record
 
 The public record is deliberately sanitized. Exact targets, commits, native receipts, generated source material, network addresses and screenshots of real reviews are retained only in ignored `.local/`.
 
@@ -20,7 +20,7 @@ The complex read example and the specifically authorized write target are separa
 
 ## Automated verification
 
-`pnpm check` runs TypeScript checks, 60 focused tests, and a production build. `pnpm test:e2e` runs fifteen Chromium tests for the reader, source selection and editable preview, viewer restrictions, hostile HTML, mobile layout, URL import and inline MR model/effort settings.
+`pnpm check` runs TypeScript checks, 69 focused tests, and a production build. `pnpm test:e2e` runs seventeen Chromium tests for the reader, source selection and editable preview, viewer restrictions, hostile HTML, mobile layout, URL import and inline MR model/effort settings.
 
 Synthetic tests cover concurrent duplicate import, latest-version changes and old explanations, side-aware diff positions, unknown publication results and marker reconciliation, idempotent/concurrent publishing, explicit general-comment relocation, preview digest changes, restart interruption, private source caches, unshared reviews, API authentication/origin checks, exact single-use execution approvals, and long event-history replay. A real bwrap process with a synthetic snapshot verifies a separate network namespace, an empty credential environment, inaccessible owner files and disposable writes. It is not execution proof for any reviewed repository.
 
@@ -28,7 +28,7 @@ Source snapshots have private filesystem artifacts. Explanation HTML is stored o
 
 ## Delivery boundaries
 
-- Phase two GitHub PR ingestion and comment writeback are not implemented. The public GitHub source repository is independent of that provider.
+- GitHub uses the gh adapter described below. Native GitHub comment publication remains subject to a concrete owner-approved preview; synthetic write tests do not establish live writeback.
 - Real version races, platform timeouts and partial write outcomes were not induced on a live review. Their handling is covered with synthetic platform responses.
 - Project execution requires another exact owner approval. Large snapshots are bounded; binary files, symlinks, submodules and unavailable source are rejected instead of producing a partial executable checkout.
 - Connector and service interruptions do not replay an approval, a publication or an analysis. An uncertain publication requires marker reconciliation.
@@ -101,3 +101,22 @@ New analyses can save a bounded overview, guide groups and numbered HTML fragmen
 `pnpm check` passed all 60 focused tests, TypeScript and the production build. Both protocol peers verify multi-response assembly and retained partials after output-limit failure. Tests cover ordering, replacement, content integrity, invalid indices, version identity, reopening, CLI forwarding and unauthenticated/visitor reads. All fifteen Chromium cases passed, including persisted saved-part counts after reload and honest failure messages with/without prior explanations. A real native canary used the same model and high effort as the failed analysis, with isolated synthetic source. It saved seven parts (overview, three guide groups, three HTML fragments), completed source/reference validation, and produced a working Before/After and scenario control in the sandbox iframe. Cumulative output was 39,075 tokens across responses; the largest response was 25,899, below the observed 32,000 per-response allowance. Desktop/mobile interactions had no page/console errors or overflow. This verifies segmented native output for that synthetic case, not a rerun of the failed real MR.
 
 After deployment, owner UI/CLI reads returned the original failure honestly and reported zero saved parts for the legacy run, without inventing checkpoints. Viewer artifact reads remain unavailable. All 48 distribution files matched the local build, seven existing explanation files and owner configuration were unchanged, and the original failed record was byte-identical. Native receipts and screenshots remain private. Segmentation cannot guarantee success if an individual response exhausts its allowance before calling the save tool.
+
+## GitHub provider through gh
+
+The native connector invokes the installed `gh` CLI with the existing github.com account; the container and client plugin do not receive GitHub credentials. Normal and subpage PR links share canonical review identities. Comparisons pin base-tip/head SHAs, use the actual merge base for old source, reject ref/count races and the 300-file API boundary, and preserve exact revision identities in trees/blobs. Missing/truncated patches cannot acquire inline positions. Published ordinary/review/inline discussions paginate; pending reviews and their comments stay excluded.
+
+A real existing PR returned its pinned comparison and old/new source. A separate cross-repository fork PR returned ten changed files, submitted discussions and a source blob at the fork head through the base repository. Exact targets, content and source/version receipts remain private. An initial deployed import received GitHub HTTP 503 before analysis admission; that failure is retained. Read-only 502/503/504 responses now receive at most two short retries. Publication remains a single request followed by explicit marker reconciliation when uncertain.
+
+`pnpm check` passed all 68 tests, TypeScript and the production build. GitHub cases exercise fixed merge-base/head reads, source drift, incomplete/oversized comparisons, pagination, private review filtering, regular/binary/LFS/indirect/oversized source, renamed/deleted/multiline write payloads, exact confirmation and unknown-outcome reconciliation, read retry bounds, no write retries, and literal Unicode/JSON stdin. All sixteen Chromium tests passed. The synthetic GitHub UI uses PR labels, existing backend/model/effort controls, guide navigation and pinned source on desktop/mobile with no page errors or overflow. Browser plugin not available; existing Playwright was used. The skill and plugin manifests retain their identity with version 0.1.2, and skill metadata validation passed.
+
+GitHub previews omit automatic company-network share links; those links remain separate output for the owner's authorized review handoff. General and native inline publication are implemented and tested with synthetic responses. The owner approved exact previews for one general and one inline GitHub test comment. Both published successfully through the deployed CLI/connector; direct platform reads matched the complete bodies and publication markers. Inline readback also matched the full reviewed head, canonical file path, RIGHT side and selected added line. Refresh returned both published comments. No other comments or messages were sent.
+
+
+The deployed post-submission helper completed a real GitHub analysis with the owner's configured Codex model/effort, eight saved artifact parts, three logical guide groups and validated pinned source references. Its credential-free share check returned a version-bound read-only URL. Owner browser checks restored persisted progress and native token usage after reload. Final owner/visitor walkthrough checks exercise the generated scenario switch and grouped guide; private endpoints remain unavailable to visitors. No reviewed project code was executed.
+
+## Global slot visibility
+
+An existing cross-review UI gap exposed a raw busy error while the GitHub acceptance task occupied the single execution slot. The owner-only `activity` API/CLI now returns minimal active-run/review metadata, including cancellation-in-progress until the slot is released. The workspace notice links to the active review; other reviews disable generation/questions while retaining editable settings and recover automatically when idle. Busy conflicts include the active run identity without private prompts, answers or native session IDs. No queue or automatic replay was added.
+
+All 69 focused tests passed, including owner authentication, visitor isolation, busy error metadata and slot release. All seventeen Chromium cases passed, including cross-review visibility, editable settings, disabled/recovered generation and questions, and mobile wrapping. CLI activity forwarding passed, and the production build passed. Deployment waited for the real analysis to finish and preserved all nine explanation artifacts and the existing owner configuration.

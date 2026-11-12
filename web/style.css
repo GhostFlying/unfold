@@ -1802,3 +1802,37 @@ pre {
     font-size: 22px;
   }
 }
+
+.workspace-activity {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 32px;
+  border-bottom: 1px solid var(--rule);
+  background: #f4f7f2;
+  font-size: 12px;
+}
+.workspace-activity .activity-label {
+  color: #527e60;
+  white-space: nowrap;
+}
+.workspace-activity .activity-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace-activity a {
+  color: #527e60;
+  white-space: nowrap;
+  margin-left: auto;
+}
+@media (max-width: 640px) {
+  .workspace-activity {
+    padding: 10px 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .workspace-activity .activity-title {
+    max-width: 60vw;
+  }
+}

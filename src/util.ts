@@ -37,13 +37,15 @@ export async function command(
     env?: NodeJS.ProcessEnv;
     timeout?: number;
     maxBuffer?: number;
+    input?: string;
   } = {},
 ) {
-  return new Promise<string>((resolve, reject) =>
-    execFile(
+  const { input, ...executionOptions } = options;
+  return new Promise<string>((resolve, reject) => {
+    const child = execFile(
       exe,
       args,
-      { timeout: 60_000, maxBuffer: 32 * 1024 * 1024, ...options },
+      { timeout: 60_000, maxBuffer: 32 * 1024 * 1024, ...executionOptions },
       (error, stdout, stderr) => {
         if (error)
           reject(
@@ -55,8 +57,12 @@ export async function command(
           );
         else resolve(stdout);
       },
-    ),
-  );
+    );
+    // Bodies travel over stdin, never through a shell or command-line arguments.
+    // A child exiting before reading stdin is reported by execFile's callback.
+    child.stdin?.on("error", () => {});
+    child.stdin?.end(input);
+  });
 }
 export function structuredReply(text: string) {
   const stripped = text

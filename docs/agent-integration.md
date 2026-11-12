@@ -1,8 +1,8 @@
 # 提交后的 Agent 工作流
 
-`unfold-review` 在代码修改已提交或更新到 MR 后，准备对应版本的交互式讲解、改动导览和只读链接。可作为独立 skill 安装，也可通过 Unfold Codex plugin 安装；两种方式使用相同的 skill 和脚本。
+`unfold-review` 在代码修改已提交或更新到 MR/PR 后，准备对应版本的交互式讲解、改动导览和只读链接。可作为独立 skill 安装，也可通过 Unfold Codex plugin 安装；两种方式使用相同的 skill 和脚本。
 
-当前服务支持 Codebase MR。GitHub PR 提供者留在第二阶段，插件不会将未支持的请求报告为成功。插件本身托管在 GitHub 与提供者支持是两件事。
+当前服务支持 Codebase MR 和 github.com PR，复用同一准备流程。GitHub 由部署主机上的 `gh` 登录提供接入，调用 Agent 的机器不需要复制 GitHub 凭据。使用 GitHub 时先确认已部署支持该提供者的服务；认证和读取范围见 [GitHub 接入](github.md)。
 
 ## 安装 Codex plugin
 

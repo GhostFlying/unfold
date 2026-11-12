@@ -67,6 +67,63 @@ test("concurrent duplicate imports preserve one review and valid version ownersh
     f.cleanup();
   }
 });
+test("workspace activity and busy conflicts expose the active review without private conversation content", async () => {
+  const f = fixture();
+  const { review } = await seed(f.service);
+  const owner = await createServer(f.service, true),
+    viewer = await createServer(f.service, false);
+  const headers = { authorization: `Bearer ${secret(f.root, "owner-token")}` };
+  try {
+    assert.equal((await owner.inject("/api/v1/activity")).statusCode, 401);
+    assert.equal((await viewer.inject("/api/v1/activity")).statusCode, 404);
+    assert.deepEqual(
+      (await owner.inject({ url: "/api/v1/activity", headers })).json().data,
+      { active: null },
+    );
+    const run: Run = {
+      id: "other-active-run",
+      reviewId: review.id,
+      versionId: review.versionId,
+      state: "awaiting_approval",
+      kind: "question",
+      backend: "codex",
+      model: "test-model",
+      question: "PRIVATE-QUESTION-SENTINEL",
+      answer: "PRIVATE-ANSWER-SENTINEL",
+      threadId: "PRIVATE-THREAD-SENTINEL",
+      createdAt: new Date().toISOString(),
+    };
+    f.service.store.put("run", run);
+    f.service.controllers.set(run.id, new AbortController());
+    const response = await owner.inject({ url: "/api/v1/activity", headers });
+    const active = response.json().data.active;
+    assert.equal(active.id, run.id);
+    assert.equal(active.reviewId, review.id);
+    assert.equal(active.title, review.title);
+    assert.equal(active.state, "awaiting_approval");
+    assert.ok(!response.body.includes("PRIVATE-"));
+    await assert.rejects(
+      f.service.startRun(review.id, "analysis", {}),
+      (e: any) =>
+        e.code === "agent_busy" &&
+        e.status === 409 &&
+        e.details.activeRun.id === run.id &&
+        !JSON.stringify(e.details).includes("PRIVATE-"),
+    );
+    f.service.cancel(run.id);
+    assert.equal(f.service.activeOperation()?.stopping, true);
+    await assert.rejects(
+      f.service.startRun(review.id, "analysis", {}),
+      (e: any) => e.code === "agent_busy",
+    );
+    f.service.controllers.delete(run.id);
+    assert.equal(f.service.activeOperation(), null);
+  } finally {
+    await owner.close();
+    await viewer.close();
+    f.cleanup();
+  }
+});
 test("MR subpages and copied query/fragment links normalize to one canonical review", async () => {
   const f = fixture();
   try {

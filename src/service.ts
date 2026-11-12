@@ -6,6 +6,7 @@ import { identity, parseTarget } from "./providers.js";
 import {
   AppError,
   type Approval,
+  type ActiveOperation,
   type Backend,
   type ConfigApplication,
   type ModelProfile,
@@ -247,6 +248,31 @@ export class Service {
     this.store.put("reference", ref);
     return ref;
   }
+  activeOperation(): ActiveOperation | null {
+    const runId = this.controllers.keys().next().value;
+    if (!runId) return null;
+    const run = this.store.maybe<Run>("run", runId);
+    if (!run) return null;
+    return {
+      id: run.id,
+      reviewId: run.reviewId,
+      title: this.review(run.reviewId).title,
+      kind: run.kind,
+      state: run.state,
+      backend: run.backend,
+      model: run.model,
+      stopping: !!this.controllers.get(runId)?.signal.aborted,
+    };
+  }
+  private requireIdle() {
+    if (this.controllers.size)
+      throw new AppError(
+        "agent_busy",
+        "另一个 Agent 任务正在运行，请先查看正在运行的任务。",
+        409,
+        { activeRun: this.activeOperation() },
+      );
+  }
   async startRun(
     reviewId: string,
     kind: "analysis" | "question",
@@ -259,12 +285,7 @@ export class Service {
       explanationId?: string;
     },
   ) {
-    if (this.controllers.size)
-      throw new AppError(
-        "agent_busy",
-        "Another agent operation is active",
-        409,
-      );
+    this.requireIdle();
     const r = this.review(reviewId);
     const explanation = options.explanationId
       ? this.store.get<Explanation>("explanation", options.explanationId)
@@ -301,12 +322,7 @@ export class Service {
       backend,
       profile: requestedProfile,
     });
-    if (this.controllers.size)
-      throw new AppError(
-        "agent_busy",
-        "Another agent operation is active",
-        409,
-      );
+    this.requireIdle();
     const run: Run = {
       id: id(),
       reviewId,
@@ -591,9 +607,14 @@ export class Service {
     let body = `${d.body.trim()}\n\n---\nReviewed revision: \`${s.head}\` (${s.target.url})`;
     if (d.anchor)
       body += `\nCode: \`${d.anchor.path}:${d.anchor.start}${d.anchor.end !== d.anchor.start ? `–${d.anchor.end}` : ""}\` (${d.anchor.side} side).`;
-    try {
-      body += `\nExplanation: ${shareUrl(this.config, d.reviewId)}`;
-    } catch {}
+    // A github.com PR may be public. Its draft must not automatically disclose
+    // the owner's company-network share entry. The skill returns that link
+    // separately for the caller's explicitly authorized review handoff.
+    if (s.target.provider === "codebase") {
+      try {
+        body += `\nExplanation: ${shareUrl(this.config, d.reviewId)}`;
+      } catch {}
+    }
     return body;
   }
   preview(draftId: string) {
@@ -628,7 +649,9 @@ export class Service {
       kind: d.anchor ? "inline" : "general",
       body,
       digest,
-      warning: d.anchor ? null : "This will be posted as a general MR comment.",
+      warning: d.anchor
+        ? null
+        : `This will be posted as a general ${r.target.provider === "github" ? "PR" : "MR"} comment.`,
     };
   }
   async publish(draftId: string, confirm: string) {
@@ -653,7 +676,7 @@ export class Service {
     if (fresh.head !== old.head || fresh.base !== old.base)
       throw new AppError(
         "stale_draft",
-        "The MR changed since preview. Refresh and relocate the draft.",
+        `The ${old.target.provider === "github" ? "PR" : "MR"} changed since preview. Refresh and relocate the draft.`,
         409,
       );
     // Re-read after asynchronous preflight: edits and concurrent submissions must not win a race.

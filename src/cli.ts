@@ -258,6 +258,10 @@ program
     }),
   );
 program.command("doctor").action(wrap(async () => out(await api("/doctor"))));
+program
+  .command("activity")
+  .description("Show the workspace's active agent operation")
+  .action(wrap(async () => out(await api("/activity"))));
 const auth = program.command("auth");
 auth
   .command("token")

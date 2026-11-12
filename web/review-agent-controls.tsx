@@ -34,17 +34,21 @@ type SettingsPatch = {
 
 export function ReviewAgentControls({
   reviewId,
+  sourceKind = "MR",
   regenerate,
   disabled,
   active,
+  workspaceBusy = false,
   onSaved,
   onStarted,
   onPendingChange,
 }: {
   reviewId: string;
+  sourceKind?: "MR" | "PR";
   regenerate: boolean;
   disabled: boolean;
   active: boolean;
+  workspaceBusy?: boolean;
   onSaved: (review: Review) => void;
   onStarted: (run: Run) => void;
   onPendingChange: (pending: boolean) => void;
@@ -135,7 +139,7 @@ export function ReviewAgentControls({
       setPending(undefined);
       onSaved(review);
     } catch (e: any) {
-      setError(`MR 设置保存失败：${e.message}`);
+      setError(`${sourceKind} 设置保存失败：${e.message}`);
     } finally {
       setSaving(false);
     }
@@ -223,12 +227,12 @@ export function ReviewAgentControls({
   return (
     <section
       className="review-agent-controls"
-      aria-label="当前 MR 的 Agent 设置"
+      aria-label={`当前 ${sourceKind} 的 Agent 设置`}
     >
       <form
         onSubmit={async (e) => {
           e.preventDefault();
-          if (blocked || disabled || active) return;
+          if (blocked || disabled || active || workspaceBusy) return;
           setSubmitting(true);
           setError("");
           try {
@@ -245,7 +249,7 @@ export function ReviewAgentControls({
         <label>
           <span>Agent</span>
           <select
-            aria-label="MR Agent"
+            aria-label={`${sourceKind} Agent`}
             disabled={locked || !settings}
             value={settings?.backendOverride || ""}
             onChange={(e) =>
@@ -264,7 +268,7 @@ export function ReviewAgentControls({
         <label className="agent-model-control">
           <span>模型</span>
           <select
-            aria-label="MR 模型"
+            aria-label={`${sourceKind} 模型`}
             disabled={locked || !models.length}
             value={override.model || ""}
             title={requestedModel || model?.displayName}
@@ -298,7 +302,7 @@ export function ReviewAgentControls({
         <label>
           <span>思考</span>
           <select
-            aria-label="MR thinking effort"
+            aria-label={`${sourceKind} thinking effort`}
             disabled={locked || !model}
             value={
               override.modelDefaultEffort
@@ -342,26 +346,31 @@ export function ReviewAgentControls({
             ))}
           </select>
         </label>
-        <button className="primary" disabled={disabled || active || blocked}>
+        <button
+          className="primary"
+          disabled={disabled || active || workspaceBusy || blocked}
+        >
           {active
             ? "分析中…"
-            : submitting
-              ? "正在启动…"
-              : regenerate
-                ? "重新讲解"
-                : "生成讲解"}{" "}
+            : workspaceBusy
+              ? "Agent 忙碌"
+              : submitting
+                ? "正在启动…"
+                : regenerate
+                  ? "重新讲解"
+                  : "生成讲解"}{" "}
           <span>✳</span>
         </button>
       </form>
       <div className="agent-settings-feedback">
         <span className="hint" role="status">
           {saving
-            ? "正在保存 MR 设置…"
+            ? `正在保存 ${sourceKind} 设置…`
             : pending
               ? "设置尚未保存"
               : settings
                 ? adjustment
-                : "正在读取 MR 设置…"}
+                : `正在读取 ${sourceKind} 设置…`}
         </span>
         {error || catalogError || (models.length > 0 && !valid) ? (
           <span className="error" role="alert">
@@ -392,7 +401,7 @@ export function ReviewAgentControls({
                   );
                   setPending(undefined);
                 } catch (e: any) {
-                  setError(`MR 设置读取失败：${e.message}`);
+                  setError(`${sourceKind} 设置读取失败：${e.message}`);
                 } finally {
                   setSaving(false);
                 }

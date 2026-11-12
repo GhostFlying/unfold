@@ -103,6 +103,9 @@ export async function startConnector(config: Config) {
         data: {
           ready: runtime.status().state === "applied",
           configuration: runtime.status(),
+          providers: {
+            github: await runtime.value().providers.github.diagnose(),
+          },
           backends: await Promise.all(
             (["traex", "codex"] as const).map(async (backend) => {
               try {

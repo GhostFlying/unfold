@@ -30,12 +30,14 @@ export function ReviewPage({
   id,
   explanationId,
   owner,
+  workspaceBusy = false,
   settingsRevision,
   onChange,
 }: {
   id: string;
   explanationId?: string;
   owner: boolean;
+  workspaceBusy?: boolean;
   settingsRevision: number;
   onChange: () => Promise<void>;
 }) {
@@ -182,6 +184,7 @@ export function ReviewPage({
     );
   const { review, version, explanation } = bundle,
     shown = diffSnapshot || version;
+  const sourceKind = review.target.provider === "github" ? "PR" : "MR";
   const displayedRun =
     active ||
     runs.find(
@@ -240,14 +243,14 @@ export function ReviewPage({
                 <>
                   <button
                     className="quiet"
-                    title="手动刷新 MR"
+                    title={`手动刷新 ${sourceKind}`}
                     disabled={busy}
                     onClick={() =>
                       action(async () => {
                         await api(`/reviews/${id}/refresh`, "POST", {});
                         await reload();
                         await onChange();
-                        setNotice("已刷新原 MR 的提交与讨论");
+                        setNotice(`已刷新原 ${sourceKind} 的提交与讨论`);
                       })
                     }
                   >
@@ -294,9 +297,11 @@ export function ReviewPage({
             <ReviewAgentControls
               key={`${id}:${settingsRevision}`}
               reviewId={id}
+              sourceKind={sourceKind}
               regenerate={!!explanation}
               disabled={busy}
               active={!!active}
+              workspaceBusy={workspaceBusy}
               onPendingChange={setAgentPending}
               onSaved={(updated) => {
                 setBundle((current) =>
@@ -315,7 +320,10 @@ export function ReviewPage({
               ["guide", "改动导览"],
               ["explanation", "讲解"],
               ["changes", "Diff"],
-              ["discussion", `原 MR 讨论 · ${bundle.comments.length}`],
+              [
+                "discussion",
+                `原 ${sourceKind} 讨论 · ${bundle.comments.length}`,
+              ],
               ["history", `历史 · ${history.length}`],
             ].map(([key, label]) => (
               <button
@@ -369,7 +377,7 @@ export function ReviewPage({
           ) : null}
           {bundle.stale ? (
             <div className="stale-note">
-              原 MR 已有新提交。这份讲解仍对应{" "}
+              原 {sourceKind} 已有新提交。这份讲解仍对应{" "}
               <code>{version.head.slice(0, 8)}</code>。
               <button
                 className="quiet"
@@ -485,7 +493,7 @@ export function ReviewPage({
                   先看 {version.files.length} 个文件的改动 →
                 </button>
                 <details className="description">
-                  <summary>MR 描述</summary>
+                  <summary>{sourceKind} 描述</summary>
                   <pre>{version.description || "暂无描述"}</pre>
                 </details>
               </section>
@@ -513,7 +521,7 @@ export function ReviewPage({
           {tab === "discussion" ? (
             <section className="discussion-section">
               <p className="hint">
-                原 MR 是已发布讨论的权威来源。
+                原 {sourceKind} 是已发布讨论的权威来源。
                 {owner ? "点击刷新，获取作者后续回复。" : ""}
               </p>
               {bundle.comments.length ? (
@@ -706,7 +714,7 @@ export function ReviewPage({
                       <span className="mono accent">?</span>
                       <h3>从一个问题开始。</h3>
                       <p>追问整个改动，或选择代码与讲解中的一段内容。</p>
-                      <small>对话仅你可见，不会发到原 MR。</small>
+                      <small>对话仅你可见，不会发到原 {sourceKind}。</small>
                     </div>
                   ) : null}
                 </div>
@@ -714,7 +722,7 @@ export function ReviewPage({
                   className="composer"
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (busy || active || agentPending) return;
+                    if (busy || active || workspaceBusy || agentPending) return;
                     void action(async () => {
                       await api(`/reviews/${id}/questions`, "POST", {
                         question: contextBody(),
@@ -737,7 +745,9 @@ export function ReviewPage({
                     <span className="hint">私有追问</span>
                     <button
                       className="primary"
-                      disabled={busy || !!active || agentPending}
+                      disabled={
+                        busy || !!active || workspaceBusy || agentPending
+                      }
                     >
                       发送 ↑
                     </button>
@@ -747,7 +757,9 @@ export function ReviewPage({
             ) : null}
             {panel === "drafts" && owner ? (
               <div className="draft-panel">
-                <p className="hint">先形成意见。预览并确认后，才写回原 MR。</p>
+                <p className="hint">
+                  先形成意见。预览并确认后，才写回原 {sourceKind}。
+                </p>
                 <form
                   className="draft-form"
                   onSubmit={(e) => {
@@ -907,7 +919,7 @@ export function ReviewPage({
             aria-labelledby="preview-title"
           >
             <header>
-              <h2 id="preview-title">确认发布到原 MR</h2>
+              <h2 id="preview-title">确认发布到原 {sourceKind}</h2>
               <button
                 className="quiet"
                 aria-label="关闭预览"
@@ -917,8 +929,10 @@ export function ReviewPage({
               </button>
             </header>
             <p className="hint">
-              {preview.kind === "inline" ? "原生行内评论" : "普通 MR 评论"} ·{" "}
-              {review.target.repo} #{review.target.number}
+              {preview.kind === "inline"
+                ? "原生行内评论"
+                : `普通 ${sourceKind} 评论`}{" "}
+              · {review.target.repo} #{review.target.number}
             </p>
             {preview.warning ? (
               <p className="stale-note">{preview.warning}</p>
@@ -940,7 +954,7 @@ export function ReviewPage({
                     await reload();
                     setNotice(
                       result.state === "published"
-                        ? "评论已发布。刷新原 MR 可查看后续回复。"
+                        ? `评论已发布。刷新原 ${sourceKind} 可查看后续回复。`
                         : "结果未知，草稿已保留。请回查结果，不要重复发布。",
                     );
                   })

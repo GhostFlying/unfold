@@ -160,6 +160,16 @@ export interface WritingStyle {
   revision: string;
   sha256: string;
 }
+export interface ActiveOperation {
+  id: string;
+  reviewId: string;
+  title: string;
+  kind: Run["kind"];
+  state: Run["state"];
+  backend: Backend;
+  model?: string;
+  stopping: boolean;
+}
 export interface RunProgress {
   stage:
     "starting" | "investigating" | "thinking" | "generating" | "validating";

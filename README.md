@@ -2,7 +2,7 @@
 
 Understand a change before reviewing it.
 
-Unfold reads an MR's actual source at a fixed commit, asks an existing TraeX or Codex app-server to explain its design and behavior, and presents a self-contained interactive walkthrough next to the diff. Questions stay private. Comments become editable drafts and go back to the original MR only after an explicit preview and confirmation.
+Unfold reads a Codebase MR's or GitHub PR's actual source at a fixed commit, asks an existing TraeX or Codex app-server to explain its design and behavior, and presents a self-contained interactive walkthrough next to the diff. Questions stay private. Comments become editable drafts and go back to the original MR/PR only after an explicit preview and confirmation.
 
 This is a **single-owner, CLI-first tool**. Every product operation uses the same API from the command line and the web UI. Readers can open a stable company-network URL without an account. They cannot invoke the agent, inspect private conversations, approve execution, or publish comments.
 
@@ -37,7 +37,7 @@ New investigations show public agent progress, current source activity, elapsed 
 
 New analyses and private answers use the bundled [chineseplz](https://github.com/M0gician/chineseplz) `write-plain-chinese` skill, including progress messages and logical change guides. Its rules favor concrete, direct Chinese while preserving technical terms, facts and uncertainty. Both backends receive the same pinned text on every turn, including resumed conversations; CLI and Web share this behavior. Writing rules apply within the existing generation, and old explanations stay unchanged. Runs and explanations retain the skill revision and effective instruction hash in `writingStyle` metadata.
 
-## Codebase first
+## Codebase and GitHub
 
 ```sh
 pnpm unfold --json import https://code.company.example/team/repo/merge_requests/42
@@ -56,7 +56,15 @@ Copied MR subpage links such as `/checks`, nested job pages, `/changes` and `/ac
 
 Choose the global default in Settings or with `unfold config set defaultBackend '"codex"'`. `unfold backend REVIEW_ID codex` changes that review's default. Use `unfold agent models traex` or `unfold agent models codex` to list actual models and supported thinking efforts. `unfold agent defaults BACKEND --model MODEL --effort high` changes global defaults; `unfold agent set REVIEW_ID --backend BACKEND --model MODEL --effort medium` adds review overrides. Both are also available in workspace Settings and the review’s inline controls. `unfold agent set REVIEW_ID --backend BACKEND --model-default-effort` saves the selected model’s own default effort, independent of global effort; `--inherit-model`, `--inherit-effort`, and `unfold backend REVIEW_ID inherit` restore inheritance. Run-level `--model` / `--effort` flags affect only that operation. Saved settings apply automatically; an active operation finishes with its original settings before the connector switches. The settings dialog and `unfold config status` report application status, including readiness failures. A run's backend/model/effort/version are recorded; there is no silent fallback. Private questions use a persistent backend-specific conversation and carry the selected version and context.
 
-GitHub PR ingestion is reserved for phase two. Creating or using this public source repository does not enable the GitHub provider.
+GitHub PRs use the connector host's existing `gh` CLI login. Run `gh auth login --hostname github.com` on that host, then import a `https://github.com/OWNER/REPO/pull/NUMBER` URL in the Web UI or CLI:
+
+```sh
+pnpm unfold --json doctor
+pnpm unfold --json import https://github.com/OWNER/REPO/pull/NUMBER
+pnpm unfold --json analyze REVIEW_ID --backend codex --wait
+```
+
+Both providers share source/Diff, analysis, private questions, guide/history/export, version-bound comment previews and publication, and fixed read-only links. Backend/model/effort selection is independent of source. GitHub reads use an immutable merge-base/head comparison; sources come from regular UTF-8 Git blobs at those commits, including fork PRs. Ordinary comments, submitted review summaries and inline replies refresh from GitHub; pending review drafts stay private. Comment writes do not submit existing pending reviews. GitHub.com is supported; Enterprise hosts are not configured by this adapter. The compare API caps file lists at 300, so larger/incomplete comparisons fail explicitly. Missing or truncated patches cannot receive inline comments. See [GitHub setup and limits](docs/github.md).
 
 ## Comment deliberately
 
@@ -127,3 +135,5 @@ The screenshots below use synthetic source and test data only.
 ![Reading an interactive explanation](docs/assets/reader.png)
 
 ![Per-review model and thinking effort settings](docs/assets/agent-settings.png)
+
+One agent operation runs at a time. The owner workspace shows the running review with a progress link and prevents another analysis or question from starting until the slot is free. `unfold --json activity` exposes the same state; an unexpected simultaneous request returns `agent_busy` with the active run ID. Settings remain editable on other reviews.

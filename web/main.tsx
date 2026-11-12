@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { api, nav } from "./api.js";
 import { ReviewPage } from "./review.js";
 import { Settings } from "./settings.js";
-import type { Backend, Review } from "../src/types.js";
+import type { ActiveOperation, Backend, Review } from "../src/types.js";
 import "./style.css";
 
 function Logo() {
@@ -22,6 +22,9 @@ function Logo() {
 }
 function App() {
   const [route, setRoute] = useState(location.pathname),
+    [activeOperation, setActiveOperation] = useState<ActiveOperation | null>(
+      null,
+    ),
     [bootstrap, setBootstrap] = useState<any>(),
     [reviews, setReviews] = useState<Review[]>([]),
     [backend, setBackend] = useState<Backend | "">(""),
@@ -52,6 +55,31 @@ function App() {
   }, []);
   const isOwner = !!bootstrap?.authenticated,
     match = /^\/r\/([^/]+)(?:\/v\/([^/]+))?$/.exec(route);
+  useEffect(() => {
+    if (!isOwner) {
+      setActiveOperation(null);
+      return;
+    }
+    let mounted = true;
+    const refresh = async () => {
+      try {
+        const result = await api<{ active: ActiveOperation | null }>(
+          "/activity",
+        );
+        if (mounted) setActiveOperation(result.active);
+      } catch {
+        /* Race-time start errors still enforce the server's slot. */
+      }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 3000);
+    window.addEventListener("focus", refresh);
+    return () => {
+      mounted = false;
+      clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+    };
+  }, [isOwner]);
   const importReview = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -110,6 +138,34 @@ function App() {
           </a>
         </div>
       </header>
+      {isOwner && activeOperation ? (
+        <aside
+          className="workspace-activity"
+          aria-label="正在运行的任务"
+          role="status"
+        >
+          <span className="activity-label">
+            {activeOperation.stopping
+              ? "正在停止"
+              : activeOperation.state === "awaiting_approval"
+                ? "等待审批"
+                : activeOperation.kind === "analysis"
+                  ? "正在生成讲解"
+                  : "正在回答追问"}
+          </span>
+          <span className="activity-title">{activeOperation.title}</span>
+          <span className="subtle">{activeOperation.backend}</span>
+          <a
+            href={`/r/${activeOperation.reviewId}`}
+            onClick={(e) => {
+              e.preventDefault();
+              nav(`/r/${activeOperation.reviewId}`);
+            }}
+          >
+            查看进度 →
+          </a>
+        </aside>
+      ) : null}
       {error ? (
         <div className="global-error" role="alert">
           {error}
@@ -128,6 +184,9 @@ function App() {
           id={match[1]}
           explanationId={match[2]}
           owner={isOwner}
+          workspaceBusy={
+            !!activeOperation && activeOperation.reviewId !== match[1]
+          }
           settingsRevision={settingsRevision}
           onChange={reload}
         />
@@ -198,7 +257,7 @@ function App() {
                   required
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
-                  placeholder="粘贴 Codebase MR 链接…"
+                  placeholder="粘贴 Codebase MR 或 GitHub PR 链接…"
                 />
                 <select
                   aria-label="分析后端"
@@ -233,12 +292,12 @@ function App() {
                 <span className="line-no">03</span>
                 <span>确认评论</span>
                 <i>→</i>
-                <span>回到原 MR</span>
+                <span>回到原讨论</span>
               </div>
               <p>
                 问 Agent，留在这里。
                 <br />
-                提交评论，才写入原 MR。
+                提交评论，才写入原 MR / PR。
               </p>
             </div>
           </section>
@@ -287,7 +346,7 @@ function App() {
               ))
             ) : (
               <p className="empty-records">
-                还没有导入的改动。从上方粘贴一个 MR 链接开始。
+                还没有导入的改动。从上方粘贴一个 MR 或 PR 链接开始。
               </p>
             )}
           </section>

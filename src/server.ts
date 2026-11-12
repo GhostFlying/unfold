@@ -393,6 +393,9 @@ export async function createServer(service: Service, owner: boolean) {
         connector: await service.rpc("health", {}),
       }),
     );
+    app.get("/api/v1/activity", async () =>
+      ok({ active: service.activeOperation() }),
+    );
     app.get("/api/v1/reviews", async () =>
       ok(service.store.list<Review>("review").map((r) => service.review(r.id))),
     );

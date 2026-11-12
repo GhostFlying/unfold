@@ -1,8 +1,10 @@
 {
   "name": "unfold",
-  "version": "0.1.1",
-  "description": "Prepare version-bound interactive change explanations and read-only review links after MR submission.",
-  "author": { "name": "Unfold contributors" },
+  "version": "0.1.2",
+  "description": "Prepare version-bound interactive change explanations and read-only review links after PR/MR submission.",
+  "author": {
+    "name": "Unfold contributors"
+  },
   "homepage": "https://github.com/GhostFlying/unfold",
   "repository": "https://github.com/GhostFlying/unfold",
   "license": "MIT",
@@ -10,10 +12,10 @@
   "interface": {
     "displayName": "Unfold",
     "shortDescription": "PR/MR 的交互式改动讲解",
-    "longDescription": "提交或更新 MR 后，准备对应版本的交互式讲解、改动分类与只读链接，供 Agent 衔接 review 通知流程。",
+    "longDescription": "提交或更新 PR/MR 后，准备对应版本的交互式讲解、改动分类与只读链接，供 Agent 衔接 review 通知流程。",
     "developerName": "Unfold contributors",
     "category": "Productivity",
     "capabilities": [],
-    "defaultPrompt": "使用 $unfold-review 为刚提交或更新的 MR 准备只读讲解链接。"
+    "defaultPrompt": "使用 $unfold-review 为刚提交或更新的 PR/MR 准备只读讲解链接。"
   }
 }

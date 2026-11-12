@@ -31,4 +31,4 @@ node /ABSOLUTE/SKILL/DIRECTORY/scripts/prepare.mts MR_URL \
 
 等待审批时，用 `unfold --json approval list` 找到 `runId` 相同的请求，向用户展示具体命令、目录、源码版本、目的、网络需求和副作用。获得该请求的明确授权后，用 `unfold --json approval approve APPROVAL_ID --confirm EXACT_DIGEST` 提交决定，再以 `--resume RUN` 继续；拒绝请求使用 `approval deny`。已有的这一次授权继续有效。不要自行批准项目执行来完成讲解准备。
 
-配置缺失时只请求不可自行获取的信息；不要创建新服务、修改他人的配置、降低执行限制或输出密钥。GitHub PR 提供者未启用时，记录该限制并完成其余已授权交付。
+配置缺失时只请求不可自行获取的信息；不要创建新服务、修改他人的配置、降低执行限制或输出密钥。GitHub PR 由部署主机的 `gh` 接入，可用 `unfold --json doctor` 核对账户与认证状态。认证缺失时在部署主机运行 `gh auth login --hostname github.com`；不要在调用机器复制 token。旧服务尚未提供该适配器或 PR 超过 300 个改动文件时，保留错误和已有代码交付，不把旧讲解当作成功。

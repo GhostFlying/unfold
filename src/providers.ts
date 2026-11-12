@@ -11,6 +11,7 @@ import {
 } from "./types.js";
 import { command, hash, now, safePath } from "./util.js";
 import { diffLines } from "./diff.js";
+import { GitHub, githubTarget } from "./github.js";
 
 export function parseTarget(value: string, config: Config): Target {
   let u: URL;
@@ -30,13 +31,7 @@ export function parseTarget(value: string, config: Config): Target {
     const m = /^\/([^/]+\/[^/]+)\/pull\/(\d+)(?:\/.*)?$/.exec(u.pathname);
     if (!m || !Number.isSafeInteger(+m[2]) || +m[2] < 1)
       throw new AppError("invalid_url", "Expected a GitHub pull request URL");
-    return {
-      provider: "github",
-      host: u.hostname,
-      repo: m[1],
-      number: +m[2],
-      url: `https://github.com/${m[1]}/pull/${+m[2]}`,
-    };
+    return githubTarget(m[1], +m[2]);
   }
   if (!config.codebaseHosts.includes(u.hostname))
     throw new AppError(
@@ -62,7 +57,10 @@ export function parseTarget(value: string, config: Config): Target {
 export const identity = (t: Target) =>
   `${t.provider}:${t.host}:${t.repo.toLowerCase()}:${t.number}`;
 export class Providers {
-  constructor(readonly config: Config) {}
+  constructor(
+    readonly config: Config,
+    readonly github = new GitHub(),
+  ) {}
   async byted(args: string[]) {
     const result = JSON.parse(await command("bytedcli", ["--json", ...args]));
     if (result.status !== "success")
@@ -74,12 +72,7 @@ export class Providers {
     return result.data;
   }
   async snapshot(target: Target): Promise<Snapshot> {
-    if (target.provider !== "codebase")
-      throw new AppError(
-        "provider_unavailable",
-        "GitHub integration follows the Codebase vertical slice",
-        503,
-      );
+    if (target.provider === "github") return this.github.snapshot(target);
     const args = ["-R", target.repo];
     const meta = await this.byted([
       "codebase",
@@ -175,6 +168,8 @@ export class Providers {
     return comments;
   }
   async source(s: Snapshot, filePath: string, side: Side): Promise<Source> {
+    if (s.target.provider === "github")
+      return this.github.source(s, filePath, side);
     const p = safePath(filePath),
       commit = side === "old" ? s.base : s.head;
     const d = await this.byted([
@@ -225,6 +220,8 @@ export class Providers {
     };
   }
   async tree(s: Snapshot, directory: string, side: Side) {
+    if (s.target.provider === "github")
+      return this.github.tree(s, directory, side);
     const p = directory === "." ? "." : safePath(directory);
     const d = await this.byted([
       "codebase",
@@ -248,6 +245,8 @@ export class Providers {
     body: string,
     anchor?: { path: string; side: Side; start: number; end: number },
   ): Promise<{ id: string }> {
+    if (s.target.provider === "github")
+      return this.github.publish(s, body, anchor);
     // Use the installed CLI's own request/authentication stack without copying it.
     // Its high-level comment command re-resolves latest HEAD, so pin Position here.
     const require = createRequire(import.meta.url);

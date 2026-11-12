@@ -1,4 +1,98 @@
 import { test, expect, type Page } from "@playwright/test";
+test("a different review occupying the global slot is visible and disables only submission until released", async ({
+  page,
+}) => {
+  let active: any = {
+    id: "other-run",
+    reviewId: "other-review",
+    title: "另一份改动的源码调查",
+    kind: "analysis",
+    state: "running",
+    backend: "codex",
+    model: "test-model",
+    stopping: false,
+  };
+  await page.route("**/api/v1/activity", (route) =>
+    route.fulfill({ json: { ok: true, data: { active } } }),
+  );
+  await openOwner(page);
+  const banner = page.getByRole("status", { name: "正在运行的任务" });
+  await expect(banner).toContainText("另一份改动的源码调查");
+  await expect(
+    banner.getByRole("link", { name: "查看进度 →" }),
+  ).toHaveAttribute("href", "/r/other-review");
+  await expect(page.getByRole("button", { name: "Agent 忙碌" })).toBeDisabled();
+  await expect(page.getByLabel("MR Agent", { exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: /问 Agent/ }).click();
+  await page
+    .getByLabel("追问内容", { exact: true })
+    .fill("等待另一个任务完成后的问题");
+  await expect(page.getByRole("button", { name: "发送 ↑" })).toBeDisabled();
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: "/tmp/unfold-workspace-busy-mobile.png" });
+  active = null;
+  await expect(banner).toHaveCount(0, { timeout: 10000 });
+  await expect(page.getByRole("button", { name: /重新讲解/ })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "发送 ↑" })).toBeEnabled();
+});
+test("GitHub reviews use PR labels and the same guide, pinned source and agent controls", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  const target = {
+    provider: "github",
+    host: "github.com",
+    repo: "example/queue",
+    number: 42,
+    url: "https://github.com/example/queue/pull/42",
+  };
+  await page.route("**/api/v1/reviews**", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const result = await response.json();
+    if (result.data?.review) {
+      result.data.review.target = target;
+      result.data.version.target = target;
+    } else if (Array.isArray(result.data)) {
+      for (const r of result.data) if (r.target) r.target = target;
+    }
+    await route.fulfill({ response, json: result });
+  });
+  await openOwner(page);
+  await expect(
+    page.getByRole("link", { name: /example\/queue/ }),
+  ).toHaveAttribute("href", target.url);
+  await expect(page.getByLabel("PR Agent", { exact: true })).toBeEnabled();
+  await expect(page.getByLabel("PR 模型", { exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: /原 PR 讨论/ })).toBeVisible();
+  await page.getByRole("button", { name: "改动导览", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "逻辑改动导览" }),
+  ).toContainText("2 组 · 2 项");
+  await page.getByRole("button", { name: "讲解", exact: true }).click();
+  await page
+    .frameLocator('iframe[title="交互式改动讲解"]')
+    .getByText("src/queue.ts:2 ↗", { exact: true })
+    .click();
+  await expect(page.locator(".source-body")).toContainText(
+    "if (item.cancelled) return;",
+  );
+  await page.screenshot({ path: "/tmp/unfold-github-desktop.png" });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: "/tmp/unfold-github-mobile.png" });
+  expect(errors).toEqual([]);
+});
 async function openOwner(page: Page) {
   await page.goto("/");
   await page
