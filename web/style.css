@@ -1839,30 +1839,78 @@ pre {
 
 .guide-scope {
   grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 12px 0;
+  min-width: 0;
+  padding: 8px 0 14px;
   border-bottom: 1px solid var(--rule);
   font-size: 12px;
 }
-.guide-scope label,
-.guide-scope form {
+.scope-paths {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
 }
-.guide-scope select,
-.guide-scope input {
-  padding: 6px 9px;
+.scope-label {
+  margin-right: 6px;
+  color: var(--muted);
+}
+.scope-chip {
+  padding: 7px 11px;
+  max-width: 100%;
+  min-width: 0;
   border: 1px solid var(--rule);
   border-radius: 6px;
   background: var(--soft);
-  max-width: 280px;
+  color: #6c6c74;
+  text-align: left;
+  overflow-wrap: anywhere;
+  font-size: 12px;
 }
-.guide-scope > .quiet {
-  margin-left: auto;
+.scope-chip:hover {
+  color: #343438;
+  background: var(--soft);
+}
+.scope-chip[aria-pressed="true"] {
+  border-color: #dce6dc;
+  background: #f1f6f0;
+  color: var(--accent);
+}
+.scope-custom {
+  padding: 7px 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.scope-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.scope-status .quiet {
+  padding: 0;
+  font-size: 11px;
+}
+.scope-custom-form {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.scope-custom-form input {
+  padding: 7px 10px;
+  width: min(380px, 100%);
+  min-width: 0;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--soft);
+}
+.scope-custom-form [role="alert"] {
+  width: 100%;
+  color: #b5565f;
 }
 .scope-note {
   grid-column: 1 / -1;
@@ -1911,13 +1959,11 @@ pre {
   background: #f5f8f2;
 }
 @media (max-width: 640px) {
-  .guide-scope {
-    gap: 8px;
-  }
-  .guide-scope input {
-    width: min(55vw, 260px);
-  }
-  .guide-scope > .hint {
+  .scope-label {
     flex-basis: 100%;
+    margin: 0 0 4px;
+  }
+  .scope-chip {
+    font-size: 11px;
   }
 }

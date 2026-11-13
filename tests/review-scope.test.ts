@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { projectGuide } from "../src/review-scope.js";
+import { projectGuide, guidePaths } from "../src/review-scope.js";
 import { validateGuide } from "../src/guide.js";
 import { createServer } from "../src/server.js";
 import { secret } from "../src/config.js";
@@ -68,6 +68,66 @@ async function scopeFixture() {
   f.service.store.put("explanation", explanation);
   return { ...f, review, explanation, version, ownership };
 }
+
+test("path suggestions use saved rule directories and literal CODEOWNERS prefixes without people or glob labels", async () => {
+  const f = await scopeFixture();
+  try {
+    f.ownership.rules = ["src", "shared", "unused"].map((p, i) => ({
+      id: `r${i}`,
+      path: `${p}/OWNERS`,
+      revision: f.version.head,
+      owners: ["person-name"],
+    }));
+    assert.deepEqual(guidePaths(f.version, f.ownership), [
+      { path: "old", label: "old/", fileCount: 1 },
+      { path: "shared", label: "shared/", fileCount: 1 },
+      { path: "src", label: "src/", fileCount: 1 },
+    ]);
+    assert.equal(guidePaths(f.version).length, 3);
+    f.ownership.provider = "github";
+    f.ownership.rules = [
+      {
+        id: "r0",
+        path: ".github/CODEOWNERS",
+        pattern: "/src/**",
+        revision: f.version.head,
+        owners: ["@person-name"],
+      },
+      {
+        id: "r1",
+        path: ".github/CODEOWNERS",
+        pattern: "/shared/contract.ts",
+        revision: f.version.head,
+        owners: ["@person-name"],
+      },
+    ];
+    f.ownership.files[0].ruleIds = ["r0"];
+    f.ownership.files[1].ruleIds = ["r1"];
+    const paths = guidePaths(f.version, f.ownership);
+    assert.deepEqual(
+      paths.map((p) => p.path),
+      ["old", "shared/contract.ts", "src"],
+    );
+    assert.ok(!JSON.stringify(paths).includes("person-name"));
+    assert.ok(!JSON.stringify(paths).includes("**"));
+    const api = await createServer(f.service, false);
+    f.service.store.put("explanation", f.explanation);
+    try {
+      const guide = (
+        await api.inject(`/api/v1/reviews/${f.review.id}/guide?path=src`)
+      ).json().data;
+      assert.deepEqual(guide.paths, paths);
+      const linked = (
+        await api.inject(`/api/v1/reviews/${f.review.id}/share?path=src`)
+      ).json().data.url;
+      assert.ok(linked.includes(`/v/${f.explanation.id}?path=src`));
+    } finally {
+      await api.close();
+    }
+  } finally {
+    f.cleanup();
+  }
+});
 
 test("module output validates evidence, module numbering and required new fields while legacy guides remain readable", async () => {
   const f = await scopeFixture();

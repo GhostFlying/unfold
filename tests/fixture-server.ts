@@ -15,6 +15,8 @@ explanation.html += `<button id="test-sandbox" onclick="try{parent.document.body
 f.service.store.put("explanation", explanation);
 // A separate modular review preserves the legacy fixture and its acceptance cases.
 const previousSnapshot = f.service.current;
+const longModulePath =
+  "packages/rendering/platform/very-long-shared-interface-package";
 const moduleTarget = {
   ...previousSnapshot.target,
   repo: "sample/modules",
@@ -32,6 +34,11 @@ const moduleVersion = {
       ...previousSnapshot.files[0],
       path: "shared/contract.ts",
       oldPath: "shared/contract.ts",
+    },
+    {
+      ...previousSnapshot.files[0],
+      path: `${longModulePath}/contract.ts`,
+      oldPath: `${longModulePath}/contract.ts`,
     },
   ],
 };
@@ -60,7 +67,10 @@ moduleGroups[1].reviewFocus = ["核对调用方是否遵守新约定"];
 moduleGroups[1].context = [];
 moduleGroups[1].title = "共享接口";
 moduleGroups[1].points[0].title = "共享接口约定";
-moduleGroups[1].points[0].files = ["shared/contract.ts"];
+moduleGroups[1].points[0].files = [
+  "shared/contract.ts",
+  `${longModulePath}/contract.ts`,
+];
 for (const g of moduleGroups)
   for (const p of g.points) p.referenceIds = [moduleReference.id];
 f.service.store.put("explanation", {
@@ -76,21 +86,33 @@ f.service.store.put("explanation", {
     provider: "codebase",
     status: "complete",
     capturedAt: "2026-01-01T00:00:00Z",
-    rules: [],
+    rules: ["src", "shared", longModulePath].map((p, i) => ({
+      id: `rule-${i}`,
+      path: `${p}/OWNERS`,
+      revision: moduleVersion.head,
+      owners: [i ? "contracts" : "runtime"],
+    })),
     warnings: [],
     files: [
       {
         path: "src/queue.ts",
         side: "new",
         owners: ["runtime"],
-        ruleIds: [],
+        ruleIds: ["rule-0"],
         status: "resolved",
       },
       {
         path: "shared/contract.ts",
         side: "new",
         owners: ["contracts"],
-        ruleIds: [],
+        ruleIds: ["rule-1"],
+        status: "resolved",
+      },
+      {
+        path: `${longModulePath}/contract.ts`,
+        side: "new",
+        owners: ["contracts"],
+        ruleIds: ["rule-2"],
         status: "resolved",
       },
     ],

@@ -5,7 +5,11 @@ import type {
   Reference,
   Snapshot,
 } from "../src/types.js";
-import { projectGuide, type ReviewScope } from "../src/review-scope.js";
+import {
+  projectGuide,
+  scopePath,
+  type ReviewScope,
+} from "../src/review-scope.js";
 
 export function ChangeGuideView({
   explanation,
@@ -15,6 +19,7 @@ export function ChangeGuideView({
   scope = {},
   onScopeChange,
   onRefreshOwnership,
+  onOpenFull,
 }: {
   explanation?: Omit<Explanation, "threadId">;
   version: Snapshot;
@@ -23,18 +28,26 @@ export function ChangeGuideView({
   scope?: ReviewScope;
   onScopeChange?: (scope: ReviewScope) => void;
   onRefreshOwnership?: () => void;
+  onOpenFull?: () => void;
 }) {
   const [selected, setSelected] = useState<string>();
   const [pathDraft, setPathDraft] = useState(scope.path || "");
+  const [customPath, setCustomPath] = useState(false);
+  const [pathError, setPathError] = useState("");
   if (!explanation?.guide?.groups.length)
     return (
       <section className="guide-empty">
         <span className="mono subtle">// logical change guide</span>
-        <h2>这份讲解还没有改动导览。</h2>
+        <h2>这份讲解还没有阅读导览。</h2>
         <p>
           新生成的讲解会按修改目的分组，并逐项说明修改前后、原因与源码证据。已有讲解和
           Diff 仍可阅读。
         </p>
+        {explanation && onOpenFull ? (
+          <button className="text-button" onClick={onOpenFull}>
+            打开完整讲解 ↗
+          </button>
+        ) : null}
       </section>
     );
   let view: ReturnType<typeof projectGuide>;
@@ -69,6 +82,8 @@ export function ChangeGuideView({
   const scoped = !!(scope.owner || scope.path);
   const choose = (next: ReviewScope) => {
     setSelected(undefined);
+    setPathError("");
+    setCustomPath(false);
     onScopeChange?.(next);
   };
   const index = point ? points.indexOf(point) : -1;
@@ -79,67 +94,98 @@ export function ChangeGuideView({
     (f) => point?.files.includes(f.path) || point?.files.includes(f.oldPath),
   );
   return (
-    <section className="change-guide" aria-label="逻辑改动导览">
+    <section className="change-guide" aria-label="阅读导览">
       <div className="guide-scope">
-        <label>
-          阅读范围{" "}
-          <select
-            aria-label="阅读范围"
-            value={scope.owner ? "owner" : scope.path ? "path" : "all"}
-            onChange={(e) => {
-              if (e.target.value === "owner") choose({ owner: view.owners[0] });
-              else if (e.target.value === "path") {
-                const first = version.files[0]?.path || "src";
-                setPathDraft(first);
-                choose({ path: first });
-              } else choose({});
+        <div className="scope-paths" role="group" aria-label="阅读范围">
+          <span className="scope-label">阅读范围</span>
+          <button
+            className="scope-chip"
+            aria-pressed={!scoped}
+            onClick={() => choose({})}
+          >
+            全部改动
+          </button>
+          {view.paths.map((option) => (
+            <button
+              key={option.path}
+              className="scope-chip mono"
+              aria-pressed={view.scope.path === option.path}
+              title={`${option.label} · ${option.fileCount} 个文件`}
+              onClick={() => choose({ path: option.path })}
+            >
+              {option.label}
+            </button>
+          ))}
+          {scope.path &&
+          !view.paths.some((option) => option.path === view.scope.path) ? (
+            <button
+              className="scope-chip mono"
+              aria-pressed="true"
+              onClick={() => {
+                setPathDraft(scope.path!);
+                setCustomPath(true);
+              }}
+            >
+              {view.scope.path}
+            </button>
+          ) : null}
+          {scope.owner ? (
+            <button
+              className="scope-chip"
+              aria-pressed="true"
+              onClick={() => choose(scope)}
+            >
+              原链接范围
+            </button>
+          ) : null}
+          <button
+            className="scope-custom"
+            aria-expanded={customPath}
+            onClick={() => {
+              setPathDraft(scope.path || "");
+              setCustomPath(!customPath);
             }}
           >
-            <option value="all">全部改动</option>
-            <option value="owner" disabled={!view.owners.length}>
-              按 owner
-            </option>
-            <option value="path">按路径</option>
-          </select>
-        </label>
-        {scope.owner ? (
-          <select
-            aria-label="路径 owner"
-            value={view.scope.owner || scope.owner}
-            onChange={(e) => choose({ owner: e.target.value })}
-          >
-            {view.owners.map((o) => (
-              <option key={o} value={o}>
-                {o}
-              </option>
-            ))}
-          </select>
-        ) : null}
-        {scope.path ? (
+            自定义路径…
+          </button>
+        </div>
+        {customPath ? (
           <form
+            className="scope-custom-form"
             onSubmit={(e) => {
               e.preventDefault();
-              choose({ path: pathDraft });
+              try {
+                choose({ path: scopePath(pathDraft.trim()) });
+              } catch {
+                setPathError(
+                  "请输入仓库内的文件或目录路径，例如 src/runtime/。",
+                );
+              }
             }}
           >
             <input
               aria-label="审查路径"
+              placeholder="输入文件或目录路径"
               value={pathDraft}
               onChange={(e) => setPathDraft(e.target.value)}
+              autoFocus
             />
             <button className="quiet">应用路径</button>
+            {pathError ? <span role="alert">{pathError}</span> : null}
           </form>
         ) : null}
-        <span className="hint">
-          {scoped
-            ? `${groups.reduce((n, g) => n + g.points.length, 0)} 个相关修改点 · ${contextGroups.length} 个背景模块`
-            : "同一份讲解 · 按职责组织"}
-        </span>
-        {onRefreshOwnership ? (
-          <button className="quiet" onClick={onRefreshOwnership}>
-            更新 owner 规则
-          </button>
-        ) : null}
+        <div className="scope-status">
+          <span className="hint">
+            {scoped
+              ? `${groups.reduce((n, g) => n + g.points.length, 0)} 个相关修改点 · ${contextGroups.length} 个背景模块`
+              : "同一份讲解 · 按职责组织"}
+          </span>
+          {onRefreshOwnership ? (
+            <button className="quiet" onClick={onRefreshOwnership}>
+              刷新路径规则
+            </button>
+          ) : null}
+        </div>
       </div>
       {!view.modular ? (
         <p className="scope-note">
@@ -148,12 +194,10 @@ export function ChangeGuideView({
       ) : null}
       {!view.ownership ? (
         <p className="scope-note">
-          这份历史讲解没有保存路径 owner；可按路径选择阅读范围。
+          这份历史讲解没有保存路径规则，以下范围按变更目录整理。
         </p>
       ) : view.ownership.status !== "complete" ? (
-        <p className="scope-note">
-          部分路径 owner 尚不明确；可按路径阅读。{view.ownership.warnings[0]}
-        </p>
+        <p className="scope-note">部分路径规则尚不明确，仍可按变更目录阅读。</p>
       ) : null}
       <nav className="change-guide-nav" aria-label="修改点导航">
         <button

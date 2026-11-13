@@ -54,9 +54,7 @@ export function ReviewPage({
     [drafts, setDrafts] = useState<Draft[]>([]),
     [approvals, setApprovals] = useState<Approval[]>([]),
     [history, setHistory] = useState<Explanation[]>([]),
-    [tab, setTab] = useState(() =>
-      /[?&](?:owner|path)=/.test(location.search) ? "guide" : "explanation",
-    ),
+    [tab, setTab] = useState("guide"),
     [panel, setPanel] = useState(""),
     [selected, setSelected] = useState<Reference>(),
     [source, setSource] = useState<Source>(),
@@ -330,8 +328,8 @@ export function ReviewPage({
           ) : null}
           <nav className="reader-tabs" aria-label="改动内容">
             {[
-              ["guide", "改动导览"],
-              ["explanation", "讲解"],
+              ["guide", "阅读导览"],
+              ["explanation", "完整讲解"],
               ["changes", "Diff"],
               [
                 "discussion",
@@ -342,6 +340,7 @@ export function ReviewPage({
               <button
                 key={key}
                 className={tab === key ? "active" : ""}
+                aria-current={tab === key ? "page" : undefined}
                 onClick={() => setTab(key)}
               >
                 {label}
@@ -439,6 +438,7 @@ export function ReviewPage({
               explanation={explanation}
               version={version}
               scope={scope}
+              onOpenFull={() => setTab("explanation")}
               onScopeChange={(next) => {
                 setScope(next);
                 const url = new URL(location.href);

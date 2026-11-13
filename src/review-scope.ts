@@ -3,6 +3,7 @@ import {
   type Explanation,
   type Snapshot,
   type ChangeGroup,
+  type Ownership,
 } from "./types.js";
 
 export type ReviewScope = { owner?: string; path?: string };
@@ -22,6 +23,67 @@ export function scopePath(value: string) {
       "Use a repository-relative path without traversal",
     );
   return p;
+}
+function within(file: string, directory: string) {
+  return file === directory || file.startsWith(directory + "/");
+}
+// Suggest actual paths, never reviewer identities or raw glob expressions. The
+// same saved suggestions are available to CLI clients and the reader controls.
+export function guidePaths(snapshot: Snapshot, ownership?: Ownership) {
+  const choices = new Set<string>();
+  const rulePaths = new Map(
+    (ownership?.rules || []).map((rule) => {
+      let p = "";
+      if (ownership?.provider === "codebase") {
+        if (rule.path.endsWith("/OWNERS"))
+          p = rule.path.slice(0, -"/OWNERS".length);
+      } else {
+        const literal: string[] = [];
+        for (const part of (rule.pattern || "").replace(/^\//, "").split("/")) {
+          if (!part || /[*?\\[\]{}]/.test(part)) break;
+          literal.push(part);
+        }
+        p = literal.join("/");
+      }
+      return [rule.id, p];
+    }),
+  );
+  const boundRules = new Map<string, Set<string>>();
+  for (const binding of ownership?.files || []) {
+    const ids = boundRules.get(binding.path) || new Set<string>();
+    binding.ruleIds.forEach((id) => ids.add(id));
+    boundRules.set(binding.path, ids);
+  }
+  const directories = [...rulePaths.values()]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  for (const file of snapshot.files)
+    for (const p of new Set([file.path, file.oldPath])) {
+      const rules =
+        ownership?.provider === "codebase"
+          ? directories
+          : [...(boundRules.get(p) || [])]
+              .map((id) => rulePaths.get(id) || "")
+              .filter(Boolean);
+      const closest = rules
+        .filter((directory) => within(p, directory))
+        .sort((a, b) => b.length - a.length)[0];
+      const candidate = closest || (p.includes("/") ? p.split("/")[0] : p);
+      try {
+        choices.add(scopePath(candidate));
+      } catch {
+        // Unrecognized rule syntax cannot become a suggested public path.
+      }
+    }
+  return [...choices].sort().map((p) => ({
+    path: p,
+    label:
+      p +
+      (snapshot.files.some((f) => f.path === p || f.oldPath === p) ? "" : "/"),
+    fileCount: snapshot.files.filter(
+      (f) => within(f.path, p) || within(f.oldPath, p),
+    ).length,
+  }));
 }
 export function projectGuide(
   explanation: Pick<
@@ -151,6 +213,7 @@ export function projectGuide(
   return {
     summary: explanation.summary,
     scope: { owner, path: p },
+    paths: guidePaths(snapshot, ownership),
     owners,
     focusFiles: [...selected].sort(),
     groups,

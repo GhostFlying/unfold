@@ -80,13 +80,15 @@ Logical change guides use `guide REVIEW [--explanation ID] [--point g1-c1]`. The
 unfold --json owners REVIEW
 unfold --json owners REVIEW --refresh
 unfold --json owners REVIEW --explanation EXPLANATION_ID
-unfold --json guide REVIEW --owner NAME
+unfold --json guide REVIEW
 unfold --json guide REVIEW --path src/ --point g1-c1
-unfold --json share REVIEW --owner NAME
+unfold --json share REVIEW --path src/
 unfold --json share REVIEW --path src/ --explanation EXPLANATION_ID
 ```
 
-Choose one owner or one relative path. Paths match an exact file or a directory prefix, including a rename's old/new paths; traversal is rejected. Cross-owner change points keep their complete explanation and file list, with `focusFiles` identifying the selected part. Output retains the global `summary`, directly relevant `groups`, module `responsibility` / `reviewFocus`, separately labeled `contextGroups` with reasons and verified references, and ownership capture status. Empty matches return an empty direct list. Unknown owners and conflicting scopes return structured errors. Full HTML remains the whole-change walkthrough.
+The Web reader opens **阅读导览** by default, with **完整讲解** for the full HTML. Flat reading-range buttons show **全部改动** and suggested paths, rather than people. `guide` returns the same suggested `paths` array, each with canonical `path`, display `label` and changed `fileCount`; these suggestions use the saved rules or changed directories and are independent of the selected scope. GitHub globs become matching literal prefixes or changed directories, never raw glob labels. A custom relative file/directory is also accepted through `--path`.
+
+Paths match an exact file or a directory prefix, including a rename's old/new paths; traversal is rejected. Cross-path change points keep their complete explanation and file list, with `focusFiles` identifying the selected part. Output retains the global `summary`, directly relevant `groups`, module `responsibility` / `reviewFocus`, separately labeled `contextGroups` with reasons and verified references, and ownership capture status. Empty matches return an empty direct list. Legacy `guide` / `share --owner NAME` and owner-based URLs remain supported; the Web reader labels their saved selection without listing names. Choose one legacy owner or one path; unknown owners and conflicting scopes return structured errors.
 
 `owners` reads the current version's cached rules on the management listener. `--version ID` selects another version; `--refresh` explicitly recaptures rules and never changes an existing explanation. New analyses refresh rules once and freeze them into the explanation. `--explanation ID` and all visitor reads return only that explanation's saved capture; historical missing rules are not inferred. Existing guides without module links still support path filtering and report `modular: false`.
 

@@ -1,5 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
-test("saved owner/path views retain overall context, navigate other modules and survive readonly scoped links without generation", async ({
+test("path buttons default to the reading guide, retain context and share without generation", async ({
   page,
 }) => {
   const errors: string[] = [],
@@ -18,16 +18,26 @@ test("saved owner/path views retain overall context, navigate other modules and 
     .fill("synthetic-test-owner-key-not-a-real-credential");
   await page.getByRole("button", { name: "打开工作区" }).click();
   await page.getByText("Review by module", { exact: true }).click();
-  await page.getByRole("button", { name: "改动导览", exact: true }).click();
-  const guide = page.getByRole("region", { name: "逻辑改动导览" });
-  await guide.getByLabel("阅读范围", { exact: true }).selectOption("owner");
-  await guide.getByLabel("路径 owner", { exact: true }).selectOption("runtime");
+  const guide = page.getByRole("region", { name: "阅读导览" });
+  await expect(guide).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "阅读导览", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("iframe")).toHaveCount(0);
+  const ranges = guide.getByRole("group", { name: "阅读范围" });
+  await expect(ranges.getByRole("combobox")).toHaveCount(0);
+  await expect(ranges).not.toContainText("runtime");
+  await expect(ranges).not.toContainText("contracts");
+  await ranges.getByRole("button", { name: "src/", exact: true }).click();
+  await expect(
+    ranges.getByRole("button", { name: "src/", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await expect(guide).toContainText("1 个相关修改点 · 1 个背景模块");
   await expect(guide).toContainText("整体背景");
   await expect(guide).toContainText("资源释放依赖共享接口的新回调约定");
   await expect(guide).toContainText("核对取消后是否释放资源");
-  expect(new URL(page.url()).searchParams.get("owner")).toBe("runtime");
-  await page.screenshot({ path: "/tmp/unfold-module-owner-desktop.png" });
+  expect(new URL(page.url()).searchParams.get("path")).toBe("src");
+  await page.screenshot({ path: "/tmp/unfold-path-guide-desktop.png" });
   await guide
     .getByRole("navigation", { name: "修改点导航" })
     .getByRole("button", { name: /共享接口约定/ })
@@ -41,24 +51,28 @@ test("saved owner/path views retain overall context, navigate other modules and 
       () => document.documentElement.scrollWidth > innerWidth,
     ),
   ).toBe(false);
-  await page.screenshot({ path: "/tmp/unfold-module-owner-mobile.png" });
+  await ranges.scrollIntoViewIfNeeded();
+  await page.screenshot({ path: "/tmp/unfold-path-guide-mobile.png" });
   await page.reload();
-  await expect(guide.getByLabel("路径 owner")).toHaveValue("runtime");
+  await expect(
+    ranges.getByRole("button", { name: "src/", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   const reviewId = new URL(page.url()).pathname.split("/").at(-1)!;
-  const response = await page.request.get(
-    `/api/v1/reviews/${reviewId}/share?owner=runtime`,
+  const shared = new URL(
+    (
+      await (
+        await page.request.get(`/api/v1/reviews/${reviewId}/share?path=src`)
+      ).json()
+    ).data.url,
   );
-  const shared = new URL((await response.json()).data.url);
   expect(shared.pathname).toContain("/v/module-explanation");
   await page.goto("http://127.0.0.1:19370" + shared.pathname + shared.search);
-  await expect(guide.getByLabel("路径 owner")).toHaveValue("runtime");
   await expect(
-    page.getByRole("button", { name: "更新 owner 规则" }),
-  ).toHaveCount(0);
-  await guide.getByLabel("阅读范围", { exact: true }).selectOption("path");
-  await guide.getByLabel("审查路径").fill("src/");
-  await guide.getByRole("button", { name: "应用路径" }).click();
-  await expect(guide).toContainText("1 个相关修改点 · 1 个背景模块");
+    ranges.getByRole("button", { name: "src/", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("button", { name: "刷新路径规则" })).toHaveCount(
+    0,
+  );
   await guide
     .getByRole("navigation", { name: "修改点导航" })
     .getByRole("button", { name: "把取消检查前移", exact: true })
@@ -67,6 +81,37 @@ test("saved owner/path views retain overall context, navigate other modules and 
   await expect(page.locator(".source-body")).toContainText(
     "if (item.cancelled) return;",
   );
+  await page.getByRole("button", { name: "关闭侧栏" }).click();
+  await ranges.getByRole("button", { name: "自定义路径…" }).click();
+  await guide.getByLabel("审查路径").fill("../private");
+  await guide.getByRole("button", { name: "应用路径" }).click();
+  await expect(guide.getByRole("alert")).toContainText("仓库内");
+  await guide.getByLabel("审查路径").fill("src/queue.ts");
+  await guide.getByRole("button", { name: "应用路径" }).click();
+  await expect(
+    ranges.getByRole("button", { name: "src/queue.ts", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "完整讲解", exact: true }).click();
+  await expect(
+    page
+      .frameLocator("iframe")
+      .getByRole("heading", { name: "Module overview" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "阅读导览", exact: true }).click();
+  await expect(
+    ranges.getByRole("button", { name: "src/queue.ts", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.goto(`http://127.0.0.1:19370${shared.pathname}?owner=runtime`);
+  await expect(
+    ranges.getByRole("button", { name: "原链接范围", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(ranges).not.toContainText("runtime");
+  await expect(guide).toContainText("1 个相关修改点 · 1 个背景模块");
+  await ranges.getByRole("button", { name: "全部改动", exact: true }).click();
+  await expect(
+    ranges.getByRole("button", { name: "全部改动", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(new URL(page.url()).search).toBe("");
   expect(errors).toEqual([]);
   expect(agentWrites).toEqual([]);
 });
@@ -142,11 +187,11 @@ test("GitHub reviews use PR labels and the same guide, pinned source and agent c
   await expect(page.getByLabel("PR Agent", { exact: true })).toBeEnabled();
   await expect(page.getByLabel("PR 模型", { exact: true })).toBeEnabled();
   await expect(page.getByRole("button", { name: /原 PR 讨论/ })).toBeVisible();
-  await page.getByRole("button", { name: "改动导览", exact: true }).click();
-  await expect(
-    page.getByRole("region", { name: "逻辑改动导览" }),
-  ).toContainText("2 组 · 2 项");
-  await page.getByRole("button", { name: "讲解", exact: true }).click();
+  await page.getByRole("button", { name: "阅读导览", exact: true }).click();
+  await expect(page.getByRole("region", { name: "阅读导览" })).toContainText(
+    "2 组 · 2 项",
+  );
+  await page.getByRole("button", { name: "完整讲解", exact: true }).click();
   await page
     .frameLocator('iframe[title="交互式改动讲解"]')
     .getByText("src/queue.ts:2 ↗", { exact: true })
@@ -175,6 +220,36 @@ async function openOwner(page: Page) {
     page.getByRole("heading", { name: "Make cancellation explicit" }),
   ).toBeVisible();
 }
+test("a legacy explanation without a guide opens its full explanation explicitly", async ({
+  page,
+}) => {
+  await openOwner(page);
+  const reviewId = new URL(page.url()).pathname.split("/")[2];
+  await page.route(`**/api/v1/reviews/${reviewId}`, async (route) => {
+    const response = await route.fetch(),
+      body = await response.json();
+    delete body.data.explanation.guide;
+    await route.fulfill({ response, json: body });
+  });
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "阅读导览", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("heading", { name: "这份讲解还没有阅读导览。" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "打开完整讲解 ↗", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "完整讲解", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+  await expect(
+    page
+      .frameLocator("iframe")
+      .getByRole("heading", { name: "A clearer lifecycle for queued work" }),
+  ).toBeVisible();
+});
 test("new run feedback streams live, recovers after reload and reconnect, and retains token usage after completion", async ({
   page,
   request,
@@ -242,6 +317,7 @@ test("owner reads interactive explanation, selects source, edits a draft and pre
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await openOwner(page);
+  await page.getByRole("button", { name: "完整讲解", exact: true }).click();
   const frame = page.frameLocator('iframe[title="交互式改动讲解"]');
   await expect(
     frame.getByRole("heading", { name: "A clearer lifecycle for queued work" }),
@@ -300,6 +376,7 @@ test("viewer can interact and read shared evidence but has no private data or wr
       await page.request.get("http://127.0.0.1:19370/api/v1/approvals")
     ).status(),
   ).toBe(404);
+  await page.getByRole("button", { name: "完整讲解", exact: true }).click();
   const frame = page.frameLocator("iframe");
   await frame.getByRole("button", { name: "Before", exact: true }).click();
   await expect(frame.locator("#trace")).toContainText("acquire worker");
@@ -318,6 +395,7 @@ test("untrusted JavaScript stays opaque and external fetch/navigation cannot exf
     await route.abort();
   });
   await openOwner(page);
+  await page.getByRole("button", { name: "完整讲解", exact: true }).click();
   const frame = page.frameLocator("iframe");
   await frame.getByRole("button", { name: "Check isolation" }).click();
   await expect(frame.locator("#isolation")).toHaveText("opaque origin");
@@ -813,8 +891,8 @@ test("logical groups open individual change explanations with source and scoped 
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await openOwner(page);
-  await page.getByRole("button", { name: "改动导览", exact: true }).click();
-  const guide = page.getByRole("region", { name: "逻辑改动导览" });
+  await page.getByRole("button", { name: "阅读导览", exact: true }).click();
+  const guide = page.getByRole("region", { name: "阅读导览" });
   await expect(guide).toContainText("2 组 · 2 项");
   await expect(
     guide.getByRole("heading", { name: "取消语义", exact: true }),
