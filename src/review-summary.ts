@@ -88,17 +88,15 @@ export function reviewSummary(
           owners,
           ownershipStatus,
           summary:
-            brief(titles.slice(0, 3).join("；"), 68) ||
-            `${files.length} 个文件修改，详见讲解`,
+            titles.join("；") || `${files.length} 个文件修改，详见完整讲解`,
           pointIds: direct.map((p) => p.id),
-          otherPoints: Math.max(0, titles.length - 3),
+          otherPoints: 0,
         };
       })
     : [];
   const overview = brief(explanation.summary || explanation.title, 110);
   const stale = review.versionId !== snapshot.id;
-  const header = `${review.target.repo} ${review.target.provider === "github" ? "#" : "!"}${review.target.number}：${overview}`;
-  const lines = sections.slice(0, 6).map((section) => {
+  const lines = sections.map((section) => {
     const owners = section.owners
       .slice(0, 4)
       .map((o) => {
@@ -113,13 +111,9 @@ export function reviewSummary(
     const ownerLabel =
       owners + remaining + unknown ||
       (section.ownershipStatus === "unowned" ? "未配置 owner" : "owner 待确认");
-    const suffix = section.otherPoints
-      ? `；另 ${section.otherPoints} 项见讲解`
-      : "";
-    return `${ownerLabel} · ${brief(section.label, 80)}：${section.summary}${suffix}`;
+    return `${ownerLabel} · ${brief(section.label, 80)}：${section.summary}`;
   });
-  const omittedPaths = Math.max(0, sections.length - lines.length);
-  if (omittedPaths) lines.push(`另 ${omittedPaths} 个路径见讲解。`);
+  const omittedPaths = 0;
   if (!sections.length) lines.push("路径摘要尚未生成。");
   return {
     reviewId: review.id,
@@ -134,7 +128,7 @@ export function reviewSummary(
     omittedPaths,
     mentions: "plain-text" as const,
     text: [
-      header,
+      overview,
       ...(stale
         ? [
             `注意：讲解对应旧提交 ${snapshot.head.slice(0, 8)}，原 MR/PR 已有新版本。`,
@@ -143,7 +137,7 @@ export function reviewSummary(
       "",
       ...lines,
       "",
-      `讲解（${snapshot.head.slice(0, 8)}）：${url}`,
+      `完整讲解（${snapshot.head.slice(0, 8)}）：${url}`,
     ].join("\n"),
   };
 }

@@ -87,15 +87,15 @@ Web **复制 Review 摘要** and CLI share `GET /api/v1/reviews/:id/review-summa
 Example, using synthetic data:
 
 ```text
-sample/queue !42：将取消检查提前，避免已取消任务占用 worker。
+将取消检查提前，避免已取消任务占用 worker。
 
 @runtime · src/：把取消检查前移
 @contracts · shared/：统一回调约定
 
-讲解（a1b2c3d4）：https://review.company.example/r/REVIEW/v/EXPLANATION
+完整讲解（a1b2c3d4）：https://review.company.example/r/REVIEW/v/EXPLANATION
 ```
 
-The overview uses saved explanation text; each path uses directly relevant change-point titles, preserving cross-path changes. The copy text bounds the overview to 110 characters, path summaries to 68, up to three point titles, six path rows and four owner labels per row, with explicit counts for additional paths/owners/points. `--json` retains all sections, owners and point IDs, plus `text`, `url`, `sourceUrl`, `head`, `versionId`, `explanationId`, `stale`, `omittedPaths` and `mentions: "plain-text"`. Missing/partial ownership stays explicit; missing legacy guides produce an overview/link with a note rather than invented path summaries. Known stale explanations carry a warning and retain their original reviewed commit.
+The overview uses saved explanation text; each path uses directly relevant change-point titles, preserving cross-path changes. The pasted text starts directly with the overview, without a repository/MR prefix, and ends with 完整讲解 plus its revision-bound URL. The overview remains capped at 110 characters, while every path row includes all its directly relevant point titles, without a per-path point-count or character cap. All path rows are included. Owner labels remain capped at four per row, with an explicit total for larger owner lists. The compatibility fields `omittedPaths` and `sections[].otherPoints` are always zero. `--json` retains all sections, owners and point IDs, plus `text`, `url`, `sourceUrl`, `head`, `versionId`, `explanationId`, `stale`, `omittedPaths` and `mentions: "plain-text"`. Missing/partial ownership stays explicit; missing legacy guides produce an overview/link with a note rather than invented path summaries. Known stale explanations carry a warning and retain their original reviewed commit.
 
 Ownership comes only from the explanation's saved capture. `@name` is a readable label, not a Feishu user-ID mention or evidence that a review invitation was sent. Resolve actual identities in the authorized downstream chat workflow. Sharing requires the configured company-network entry and never falls back to owner/Tailscale/localhost URLs. Visitors can read only published explanation data, just as with the guide/export endpoints.
 

@@ -17,6 +17,12 @@ test("handoff summarizes direct changes by path with saved owners, bounded text 
     });
     explanation.guide!.groups[1].points[0].files = ["shared/contract.ts"];
     explanation.guide!.groups[1].points[0].title = "统一共享回调约定";
+    for (let i = 1; i <= 4; i++)
+      explanation.guide!.groups[0].points.push({
+        ...explanation.guide!.groups[0].points[0],
+        id: `g1-extra-${i}`,
+        title: `补充第 ${i} 个资源释放边界的行为说明与异常处理`,
+      });
     explanation.ownership = {
       versionId: version.id,
       provider: "codebase",
@@ -60,6 +66,19 @@ test("handoff summarizes direct changes by path with saved owners, bounded text 
     assert.match(result.text, /@runtime · src\/：把取消检查前移/);
     assert.match(result.text, /@contracts · shared\/：统一共享回调约定/);
     assert.match(result.text, /owner 待确认 · old\/：统一共享回调约定/);
+    assert.ok(result.text.startsWith(result.overview + "\n"));
+    assert.ok(
+      !result.text.includes(`${review.target.repo} !${review.target.number}：`),
+    );
+    assert.ok(
+      result.text.includes(`完整讲解（${version.head.slice(0, 8)}）：`),
+    );
+    const runtime = result.sections.find((s) => s.path === "src")!;
+    assert.ok(runtime.summary.length > 68);
+    assert.ok(runtime.summary.includes("第 4 个资源释放边界"));
+    assert.equal(runtime.pointIds.length, 5);
+    assert.equal(runtime.otherPoints, 0);
+    assert.doesNotMatch(result.text, /另 \d+ 项见讲解/);
     assert.ok(
       !result.sections
         .find((s) => s.path === "shared")!
@@ -84,7 +103,6 @@ test("handoff summarizes direct changes by path with saved owners, bounded text 
       ).overview,
       completeSentence,
     );
-    assert.ok(result.text.length < 700);
     assert.equal(result.mentions, "plain-text");
     assert.ok(result.text.endsWith("https://review.example.test/r/r/v/e"));
     assert.equal(result.explanationId, explanation.id);
@@ -111,7 +129,7 @@ test("handoff summarizes direct changes by path with saved owners, bounded text 
         result.url,
       ),
     );
-    // Large reviews remain skim-friendly; JSON retains every path section.
+    // Even large reviews include every path and all its direct change titles.
     for (let i = 0; i < 10; i++) {
       version.files.push({
         ...version.files[0],
@@ -121,8 +139,10 @@ test("handoff summarizes direct changes by path with saved owners, bounded text 
       explanation.guide!.groups[0].points[0].files.push(`extra${i}/file.ts`);
     }
     const many = reviewSummary(review, version, explanation, result.url);
-    assert.equal(many.omittedPaths, 7);
-    assert.match(many.text, /另 7 个路径见讲解/);
+    assert.equal(many.omittedPaths, 0);
+    assert.equal(many.sections.length, 13);
+    assert.match(many.text, /extra9\/：/);
+    assert.doesNotMatch(many.text, /另 \d+ (项|个路径)见讲解/);
     delete explanation.guide;
     assert.match(
       reviewSummary(review, version, explanation, result.url).text,

@@ -36,7 +36,7 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
         data: {
           requestedUrl: req.url,
           content: "fixed source",
-          text: "Review background\n\n@runtime · src/：move cancellation earlier\n\n讲解：https://review.example.test/r/r/v/e",
+          text: "Review background\n\n@runtime · src/：move cancellation earlier\n\n完整讲解：https://review.example.test/r/r/v/e",
           body: body ? JSON.parse(body) : undefined,
         },
       }),
@@ -123,7 +123,7 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
     assert.equal(summaryText.exit, 0, summaryText.stderr);
     assert.equal(
       summaryText.stdout,
-      "Review background\n\n@runtime · src/：move cancellation earlier\n\n讲解：https://review.example.test/r/r/v/e\n",
+      "Review background\n\n@runtime · src/：move cancellation earlier\n\n完整讲解：https://review.example.test/r/r/v/e\n",
     );
     const artifact = await cli(
       [
