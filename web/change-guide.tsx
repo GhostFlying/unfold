@@ -5,11 +5,7 @@ import type {
   Reference,
   Snapshot,
 } from "../src/types.js";
-import {
-  projectGuide,
-  scopePath,
-  type ReviewScope,
-} from "../src/review-scope.js";
+import { projectGuide, type ReviewScope } from "../src/review-scope.js";
 
 export function ChangeGuideView({
   explanation,
@@ -31,9 +27,6 @@ export function ChangeGuideView({
   onOpenFull?: () => void;
 }) {
   const [selected, setSelected] = useState<string>();
-  const [pathDraft, setPathDraft] = useState(scope.path || "");
-  const [customPath, setCustomPath] = useState(false);
-  const [pathError, setPathError] = useState("");
   if (!explanation?.guide?.groups.length)
     return (
       <section className="guide-empty">
@@ -82,8 +75,6 @@ export function ChangeGuideView({
   const scoped = !!(scope.owner || scope.path);
   const choose = (next: ReviewScope) => {
     setSelected(undefined);
-    setPathError("");
-    setCustomPath(false);
     onScopeChange?.(next);
   };
   const index = point ? points.indexOf(point) : -1;
@@ -118,16 +109,9 @@ export function ChangeGuideView({
           ))}
           {scope.path &&
           !view.paths.some((option) => option.path === view.scope.path) ? (
-            <button
-              className="scope-chip mono"
-              aria-pressed="true"
-              onClick={() => {
-                setPathDraft(scope.path!);
-                setCustomPath(true);
-              }}
-            >
+            <span className="scope-chip mono scope-saved-path">
               {view.scope.path}
-            </button>
+            </span>
           ) : null}
           {scope.owner ? (
             <button
@@ -138,42 +122,7 @@ export function ChangeGuideView({
               原链接范围
             </button>
           ) : null}
-          <button
-            className="scope-custom"
-            aria-expanded={customPath}
-            onClick={() => {
-              setPathDraft(scope.path || "");
-              setCustomPath(!customPath);
-            }}
-          >
-            自定义路径…
-          </button>
         </div>
-        {customPath ? (
-          <form
-            className="scope-custom-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              try {
-                choose({ path: scopePath(pathDraft.trim()) });
-              } catch {
-                setPathError(
-                  "请输入仓库内的文件或目录路径，例如 src/runtime/。",
-                );
-              }
-            }}
-          >
-            <input
-              aria-label="审查路径"
-              placeholder="输入文件或目录路径"
-              value={pathDraft}
-              onChange={(e) => setPathDraft(e.target.value)}
-              autoFocus
-            />
-            <button className="quiet">应用路径</button>
-            {pathError ? <span role="alert">{pathError}</span> : null}
-          </form>
-        ) : null}
         <div className="scope-status">
           <span className="hint">
             {scoped

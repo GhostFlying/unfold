@@ -136,3 +136,9 @@ Expose model catalogs and supported reasoning efforts through the connector, own
 - Replace the reading-range dropdown and person picker with wrapping path buttons: 全部改动 plus relevant paths from the saved OWNERS/CODEOWNERS capture, with changed-path fallbacks and a custom-path action. Show paths and matching counts, not reviewer names. Keep source-based projection, background modules and complete cross-path points unchanged.
 - Derive the same suggested path choices in the shared projection for CLI/API consumers. Retain old owner-based URLs/API flags for compatibility without presenting person selection in the UI. New UI scope links use path parameters and the existing immutable explanation identity.
 - Validate default tabs, full-guide switching, path selection, custom/long paths, old owner links, scope reload/share, source navigation and mobile wrapping using the existing Playwright workflow (Browser plugin not available). No new model generation is needed for this presentation change. Update docs, commit/push and deploy while idle, preserving saved content/configuration.
+
+## Remove custom-path editing
+
+- Remove the custom-path button, form, validation state and unused CSS. Keep only 全部改动 and suggested path buttons in the reader.
+- Preserve existing CLI/API filtering and old scope links; an incoming path outside the suggestions is a read-only selected label with no editor. Selection continues to use saved guide data.
+- Update current UI docs and existing browser coverage. Verify type/build, reader interactions and deployed desktop/mobile pages, then commit/push and update Compose while idle with saved content preserved. No new model generation is needed.

@@ -1871,15 +1871,11 @@ pre {
   color: #343438;
   background: var(--soft);
 }
-.scope-chip[aria-pressed="true"] {
+.scope-chip[aria-pressed="true"],
+.scope-saved-path {
   border-color: #dce6dc;
   background: #f1f6f0;
   color: var(--accent);
-}
-.scope-custom {
-  padding: 7px 10px;
-  color: var(--muted);
-  font-size: 11px;
 }
 .scope-status {
   display: flex;
@@ -1892,25 +1888,6 @@ pre {
 .scope-status .quiet {
   padding: 0;
   font-size: 11px;
-}
-.scope-custom-form {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-}
-.scope-custom-form input {
-  padding: 7px 10px;
-  width: min(380px, 100%);
-  min-width: 0;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--soft);
-}
-.scope-custom-form [role="alert"] {
-  width: 100%;
-  color: #b5565f;
 }
 .scope-note {
   grid-column: 1 / -1;

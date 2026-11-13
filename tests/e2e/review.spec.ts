@@ -82,15 +82,10 @@ test("path buttons default to the reading guide, retain context and share withou
     "if (item.cancelled) return;",
   );
   await page.getByRole("button", { name: "关闭侧栏" }).click();
-  await ranges.getByRole("button", { name: "自定义路径…" }).click();
-  await guide.getByLabel("审查路径").fill("../private");
-  await guide.getByRole("button", { name: "应用路径" }).click();
-  await expect(guide.getByRole("alert")).toContainText("仓库内");
-  await guide.getByLabel("审查路径").fill("src/queue.ts");
-  await guide.getByRole("button", { name: "应用路径" }).click();
-  await expect(
-    ranges.getByRole("button", { name: "src/queue.ts", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  await expect(guide.getByRole("button", { name: /自定义路径/ })).toHaveCount(
+    0,
+  );
+  await expect(guide.getByRole("textbox")).toHaveCount(0);
   await page.getByRole("button", { name: "完整讲解", exact: true }).click();
   await expect(
     page
@@ -99,8 +94,11 @@ test("path buttons default to the reading guide, retain context and share withou
   ).toBeVisible();
   await page.getByRole("button", { name: "阅读导览", exact: true }).click();
   await expect(
-    ranges.getByRole("button", { name: "src/queue.ts", exact: true }),
+    ranges.getByRole("button", { name: "src/", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+  await page.goto(`http://127.0.0.1:19370${shared.pathname}?path=src/queue.ts`);
+  await expect(ranges.locator(".scope-saved-path")).toHaveText("src/queue.ts");
+  await expect(guide.getByRole("textbox")).toHaveCount(0);
   await page.goto(`http://127.0.0.1:19370${shared.pathname}?owner=runtime`);
   await expect(
     ranges.getByRole("button", { name: "原链接范围", exact: true }),
