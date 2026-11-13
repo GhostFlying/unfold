@@ -26,6 +26,7 @@ import { backendConnectionRevision } from "./connector-runtime.js";
 import { Service } from "./service.js";
 import { ArtifactDraft } from "./artifact-draft.js";
 import { projectGuide } from "./review-scope.js";
+import { reviewSummary } from "./review-summary.js";
 
 const backend = z.enum(["traex", "codex"]);
 const modelProfile = z.object({
@@ -202,6 +203,22 @@ export async function createServer(service: Service, owner: boolean) {
       groups,
       contextGroups,
     });
+  });
+  app.get("/api/v1/reviews/:id/review-summary", async (req) => {
+    const { review, version, explanation } = service.bundle(
+      param(req, "id"),
+      (req.query as { explanationId?: string }).explanationId,
+    );
+    if (!explanation)
+      throw new AppError("not_found", "No shared explanation exists", 404);
+    return ok(
+      reviewSummary(
+        review,
+        version,
+        explanation,
+        shareUrl(service.config, review.id, explanation.id),
+      ),
+    );
   });
   app.get("/api/v1/reviews/:id/owners", async (req) => {
     const q = req.query as { versionId?: string; explanationId?: string };

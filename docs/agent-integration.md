@@ -92,6 +92,8 @@ node /absolute/path/to/unfold-review/scripts/prepare.mts \
 
 `url` 固定到本次讲解，`message` 可交给后续 review 群通知流程。脚本不带所有者凭据读取 viewer 健康和指定版本的公开讲解，确认实际入口是只读监听器。该检查证明执行脚本的机器能访问，群成员各自的网络连通性仍取决于公司网络。
 
+需要包含路径 owner 和关键修改点的简短转发文本时，用上述结果中的 ID 调用 `unfold --json review-summary REVIEW_ID --explanation EXPLANATION_ID`。返回的 `text` 可直接复制，`sections[].owners` 可供已获授权的飞书流程解析真实 @ 提及。摘要基于保存的讲解，不会再次调用模型；`@name` 本身是普通文字，也不会发送消息。
+
 stderr 输出运行 ID 和结构化错误。退出码 3 表示精确执行审批待处理；决定后以相同 URL/head 和 `--resume RUN` 继续。连接中断时先检查已有运行，避免重复分析。完整参数和恢复方式见 [skill 接入参考](../plugins/unfold/skills/unfold-review/references/setup.md)。
 
 ## 交给公司通知流程

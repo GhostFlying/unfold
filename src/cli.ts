@@ -595,6 +595,21 @@ program
     ),
   );
 program
+  .command("review-summary <review>")
+  .description(
+    "Print a concise, paste-ready review handoff with path owners and a readonly URL",
+  )
+  .option("--explanation <id>")
+  .action(
+    wrap(async (review, o) => {
+      const q = new URLSearchParams();
+      if (o.explanation) q.set("explanationId", o.explanation);
+      const result = await api(`/reviews/${review}/review-summary?${q}`);
+      if (program.opts().json) out(result);
+      else process.stdout.write(result.text + "\n");
+    }),
+  );
+program
   .command("share <review>")
   .option("--explanation <id>")
   .option("--owner <name>")

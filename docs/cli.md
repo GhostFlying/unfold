@@ -23,7 +23,7 @@ Run `pnpm unfold --help`, or build and invoke `node bin/unfold.mjs` / link the e
 
 `ask`, `draft create` and `draft edit` accept `--body-file FILE` or `--body-file -` instead of `--body`. No mutation occurs automatically after a preview. There is no blanket `--yes` for publishing or execution. A body/position/version change invalidates the confirmation digest.
 
-JSON success: `{"ok":true,"data":...}`. Errors go to stderr as `{"ok":false,"error":{"code":"...","message":"...","details":...}}`. IDs are durable service IDs, not native backend session IDs. Provider thread IDs in owner run metadata are private and are excluded from shared explanation records.
+JSON success with `--json`: `{"ok":true,"data":...}`. `review-summary` defaults to paste-ready plain text; other commands keep their existing JSON envelope. Errors go to stderr as `{"ok":false,"error":{"code":"...","message":"...","details":...}}`. IDs are durable service IDs, not native backend session IDs. Provider thread IDs in owner run metadata are private and are excluded from shared explanation records.
 
 | Exit | Meaning                                                                        |
 | ---- | ------------------------------------------------------------------------------ |
@@ -73,6 +73,31 @@ Run feedback and token usage are persisted with the run. `run RUN --json` and `r
 Explanation HTML is stored once under the private artifact directory. SQLite stores its relative file path plus summary, source references, revision and generation metadata; existing read/export/share commands resolve that file through the same service authorization. A missing HTML file produces an explicit error instead of a successful empty explanation. Back up the complete data directory, including SQLite and artifacts.
 
 Logical change guides use `guide REVIEW [--explanation ID] [--point g1-c1]`. The owner and viewer read endpoint is `GET /api/v1/reviews/:id/guide` with `explanationId` / `point` query parameters. It returns revision-bound groups, change points and verified source references. New analyses generate guides alongside full HTML; legacy explanations return `guide_unavailable` until explicitly regenerated. No regeneration occurs on reads.
+
+## Review summary for chat
+
+```sh
+unfold review-summary REVIEW
+unfold review-summary REVIEW --explanation EXPLANATION_ID > review-summary.txt
+unfold --json review-summary REVIEW --explanation EXPLANATION_ID
+```
+
+Web **复制 Review 摘要** and CLI share `GET /api/v1/reviews/:id/review-summary?explanationId=ID`. The Web action pins the explanation currently displayed and summarizes the whole review even when a reading path is selected. Native clipboard copying has a selected-text fallback for the company HTTP viewer. No chat message, platform comment, model invocation or ownership refresh occurs.
+
+Example, using synthetic data:
+
+```text
+sample/queue !42：将取消检查提前，避免已取消任务占用 worker。
+
+@runtime · src/：把取消检查前移
+@contracts · shared/：统一回调约定
+
+讲解（a1b2c3d4）：https://review.company.example/r/REVIEW/v/EXPLANATION
+```
+
+The overview uses saved explanation text; each path uses directly relevant change-point titles, preserving cross-path changes. The copy text bounds the overview to 110 characters, path summaries to 68, up to three point titles, six path rows and four owner labels per row, with explicit counts for additional paths/owners/points. `--json` retains all sections, owners and point IDs, plus `text`, `url`, `sourceUrl`, `head`, `versionId`, `explanationId`, `stale`, `omittedPaths` and `mentions: "plain-text"`. Missing/partial ownership stays explicit; missing legacy guides produce an overview/link with a note rather than invented path summaries. Known stale explanations carry a warning and retain their original reviewed commit.
+
+Ownership comes only from the explanation's saved capture. `@name` is a readable label, not a Feishu user-ID mention or evidence that a review invitation was sent. Resolve actual identities in the authorized downstream chat workflow. Sharing requires the configured company-network entry and never falls back to owner/Tailscale/localhost URLs. Visitors can read only published explanation data, just as with the guide/export endpoints.
 
 ## Modules and reading scopes
 

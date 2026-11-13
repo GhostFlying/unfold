@@ -13,6 +13,7 @@ import type {
 import { diffLines } from "../src/diff.js";
 import { frameHtml } from "../src/html.js";
 import { api, nav } from "./api.js";
+import { copyText } from "./clipboard.js";
 import { RunActivity, RunUsage } from "./run-activity.js";
 import { applyRunEvent } from "../src/telemetry.js";
 import { ChangeGuideView } from "./change-guide.js";
@@ -266,6 +267,25 @@ export function ReviewPage({
                   </button>
                 </>
               ) : null}
+              <button
+                className="quiet"
+                disabled={busy || !explanation}
+                title="复制整体概述、路径 owner 和本次讲解链接；@ 为普通文字标记"
+                onClick={() =>
+                  action(async () => {
+                    const q = new URLSearchParams({
+                      explanationId: explanation!.id,
+                    });
+                    const summary = await api(
+                      `/reviews/${id}/review-summary?${q}`,
+                    );
+                    await copyText(summary.text);
+                    setNotice("已复制 Review 摘要（@ 为文字标记）");
+                  })
+                }
+              >
+                复制 Review 摘要
+              </button>
               <button
                 className="quiet"
                 onClick={() =>

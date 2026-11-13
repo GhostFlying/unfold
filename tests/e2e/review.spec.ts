@@ -1,4 +1,73 @@
 import { test, expect, type Page } from "@playwright/test";
+test("review summary copies the whole saved review on HTTPS-style and HTTP clipboard paths without posting", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: "http://127.0.0.1:19371",
+  });
+  const writes: string[] = [];
+  page.on("request", (r) => {
+    if (
+      r.method() === "POST" &&
+      /\/(analyze|questions|owners\/refresh)/.test(r.url())
+    )
+      writes.push(r.url());
+  });
+  await page.goto("/");
+  await page
+    .getByLabel("所有者密钥")
+    .fill("synthetic-test-owner-key-not-a-real-credential");
+  await page.getByRole("button", { name: "打开工作区" }).click();
+  await page.getByText("Review by module", { exact: true }).click();
+  const guide = page.getByRole("region", { name: "阅读导览" });
+  await guide
+    .getByRole("group", { name: "阅读范围" })
+    .getByRole("button", { name: "src/", exact: true })
+    .click();
+  const id = new URL(page.url()).pathname.split("/").at(-1)!;
+  const expected = (
+    await (
+      await page.request.get(
+        `/api/v1/reviews/${id}/review-summary?explanationId=module-explanation`,
+      )
+    ).json()
+  ).data;
+  await page
+    .getByRole("button", { name: "复制 Review 摘要", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("已复制 Review 摘要");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    expected.text,
+  );
+  expect(expected.text).toContain("@runtime");
+  expect(expected.text).toContain("@contracts");
+  expect(expected.text).toContain("/v/module-explanation");
+  expect(expected.text).not.toContain("PRIVATE-QUESTION-SENTINEL");
+  const viewer = await context.newPage();
+  await viewer.addInitScript(() =>
+    Object.defineProperty(navigator, "clipboard", {
+      value: undefined,
+      configurable: true,
+    }),
+  );
+  await viewer.goto(`http://127.0.0.1:19370/r/${id}/v/module-explanation`);
+  await viewer
+    .getByRole("button", { name: "复制 Review 摘要", exact: true })
+    .click();
+  await expect(viewer.getByRole("status")).toContainText("已复制 Review 摘要");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    expected.text,
+  );
+  await viewer.evaluate(() => {
+    document.execCommand = () => false;
+  });
+  await viewer
+    .getByRole("button", { name: "复制 Review 摘要", exact: true })
+    .click();
+  await expect(viewer.getByRole("alert")).toContainText("浏览器阻止了复制");
+  expect(writes).toEqual([]);
+});
 test("path buttons default to the reading guide, retain context and share without generation", async ({
   page,
 }) => {

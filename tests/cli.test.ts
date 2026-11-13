@@ -5,12 +5,12 @@ import http from "node:http";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
-const cli = (args: string[], root: string) =>
+const cli = (args: string[], root: string, json = true) =>
   new Promise<{ exit: number | null; stdout: string; stderr: string }>(
     (resolve) => {
       const p = spawn(
         process.execPath,
-        ["--import", "tsx", "src/cli.ts", "--json", ...args],
+        ["--import", "tsx", "src/cli.ts", ...(json ? ["--json"] : []), ...args],
         {
           env: { ...process.env, UNFOLD_HOME: root },
           stdio: ["ignore", "pipe", "pipe"],
@@ -36,6 +36,7 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
         data: {
           requestedUrl: req.url,
           content: "fixed source",
+          text: "Review background\n\n@runtime · src/：move cancellation earlier\n\n讲解：https://review.example.test/r/r/v/e",
           body: body ? JSON.parse(body) : undefined,
         },
       }),
@@ -90,6 +91,10 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
         "/api/v1/reviews/r/share?owner=runtime",
       ],
       [
+        ["review-summary", "r", "--explanation", "e1"],
+        "/api/v1/reviews/r/review-summary?explanationId=e1",
+      ],
+      [
         ["owners", "r", "--refresh", "--version", "v1"],
         "/api/v1/reviews/r/owners/refresh",
       ],
@@ -109,6 +114,16 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
     assert.equal(
       JSON.parse(activity.stdout).data.requestedUrl,
       "/api/v1/activity",
+    );
+    const summaryText = await cli(
+      ["--server", `http://127.0.0.1:${port}`, "review-summary", "r"],
+      root,
+      false,
+    );
+    assert.equal(summaryText.exit, 0, summaryText.stderr);
+    assert.equal(
+      summaryText.stdout,
+      "Review background\n\n@runtime · src/：move cancellation earlier\n\n讲解：https://review.example.test/r/r/v/e\n",
     );
     const artifact = await cli(
       [
