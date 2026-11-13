@@ -74,6 +74,26 @@ Explanation HTML is stored once under the private artifact directory. SQLite sto
 
 Logical change guides use `guide REVIEW [--explanation ID] [--point g1-c1]`. The owner and viewer read endpoint is `GET /api/v1/reviews/:id/guide` with `explanationId` / `point` query parameters. It returns revision-bound groups, change points and verified source references. New analyses generate guides alongside full HTML; legacy explanations return `guide_unavailable` until explicitly regenerated. No regeneration occurs on reads.
 
+## Modules and reading scopes
+
+```sh
+unfold --json owners REVIEW
+unfold --json owners REVIEW --refresh
+unfold --json owners REVIEW --explanation EXPLANATION_ID
+unfold --json guide REVIEW --owner NAME
+unfold --json guide REVIEW --path src/ --point g1-c1
+unfold --json share REVIEW --owner NAME
+unfold --json share REVIEW --path src/ --explanation EXPLANATION_ID
+```
+
+Choose one owner or one relative path. Paths match an exact file or a directory prefix, including a rename's old/new paths; traversal is rejected. Cross-owner change points keep their complete explanation and file list, with `focusFiles` identifying the selected part. Output retains the global `summary`, directly relevant `groups`, module `responsibility` / `reviewFocus`, separately labeled `contextGroups` with reasons and verified references, and ownership capture status. Empty matches return an empty direct list. Unknown owners and conflicting scopes return structured errors. Full HTML remains the whole-change walkthrough.
+
+`owners` reads the current version's cached rules on the management listener. `--version ID` selects another version; `--refresh` explicitly recaptures rules and never changes an existing explanation. New analyses refresh rules once and freeze them into the explanation. `--explanation ID` and all visitor reads return only that explanation's saved capture; historical missing rules are not inferred. Existing guides without module links still support path filtering and report `modular: false`.
+
+Shared guide queries accept `owner` or `path` alongside `explanationId` / `point`. `GET /api/v1/reviews/:id/owners` supports `versionId` for management reads or `explanationId` for saved captures. Owner-only `POST /api/v1/reviews/:id/owners/refresh` accepts an optional `versionId`. Visitors cannot refresh or contact the native provider. Scoped `share` URLs include `/v/EXPLANATION_ID` so a newer analysis cannot change their owner/path meaning. These filters do not restrict a reader's existing access to the full published explanation and its evidence.
+
+Codebase resolves effective owner candidates against pinned ancestor OWNERS files and their `no_parent` setting. The initial parser accepts `reviewers`, `approvals_required` and `no_parent`; other conditions, incomplete source or changed heads produce explicit partial/unknown results. GitHub follows CODEOWNERS location precedence and last-match rules at the captured target tip; empty ownership clears a previous match. These are declared owners, not verified team membership, invitations or current permission grants. For older GitHub snapshots missing the target tip, capture can recover it only if the live PR still matches the exact saved head and merge base. The immutable source version remains unchanged.
+
 `analyze` and `ask` always include the bundled chineseplz `write-plain-chinese` rules, on either backend and in resumed private conversations. Web operations use the same policy. The skill shapes prose within the current generation; it preserves JSON, source references, technical names, facts and uncertainty. `run RUN`, `runs REVIEW`, `show REVIEW` and `history REVIEW` expose the persisted `writingStyle` name, upstream revision, source and effective instruction SHA-256. Historical artifacts without that metadata remain unchanged. The bundled files are fixed at build time; generation does not download skills or inherit personal plugins.
 
 The bundled post-submission skill also provides a CLI workflow helper: `node /path/to/unfold-review/scripts/prepare.mts MR_URL --head FULL_SUBMITTED_COMMIT`. It composes existing CLI/API commands to refresh, verify the submitted revision, reuse/analyze, observe, and verify a pinned visitor URL. It accepts `--cli`, `--server`, `--token-file`, `--client-config`, `--backend`, `--model`, `--effort`, `--regenerate` and `--resume`; success returns structured forwarding data without sending a message. The same script's `configure --server OWNER_API_URL --token-file PRIVATE_KEY_FILE --cli UNFOLD_EXECUTABLE` and `check` commands save/verify a protected per-user binding, independent of the current repository and plugin cache. Token contents remain in the original file. Explicit options override `UNFOLD_SERVER`/`UNFOLD_TOKEN_FILE`/`UNFOLD_CLI`, then the private binding, then an existing Unfold home. `--client-config` or `UNFOLD_CLIENT_CONFIG` selects another private binding. Direct native CLI calls still use their explicit connection flags or existing `UNFOLD_HOME`. See [Agent integration](agent-integration.md) for installation, configuration and recoverable states.

@@ -8,10 +8,17 @@ import {
   type Source,
   type Comment,
   type Side,
+  type Ownership,
+  type OwnershipRule,
 } from "./types.js";
 import { command, hash, now, safePath } from "./util.js";
 import { diffLines } from "./diff.js";
 import { GitHub, githubTarget } from "./github.js";
+import {
+  ancestorDirectories,
+  codebaseOwnerConfig,
+  unavailableOwnership,
+} from "./ownership-rules.js";
 
 export function parseTarget(value: string, config: Config): Target {
   let u: URL;
@@ -117,6 +124,7 @@ export class Providers {
       description: meta.merge_request.Description || "",
       head,
       base,
+      targetHead: v.TargetCommitId,
       remoteVersion: String(v.Number),
       repoId: String(meta.repository.id),
       mrId: String(meta.merge_request.Id),
@@ -219,7 +227,11 @@ export class Providers {
       content,
     };
   }
-  async tree(s: Snapshot, directory: string, side: Side) {
+  async tree(
+    s: Snapshot,
+    directory: string,
+    side: Side,
+  ): Promise<{ path: string; name: string; type: string; size?: number }[]> {
     if (s.target.provider === "github")
       return this.github.tree(s, directory, side);
     const p = directory === "." ? "." : safePath(directory);
@@ -233,12 +245,219 @@ export class Providers {
       "--revision",
       side === "old" ? s.base : s.head,
     ]);
+    if (
+      d.file?.Truncated ||
+      d.file?.TooLarge ||
+      !Array.isArray(d.file?.DirEntries)
+    )
+      throw new AppError(
+        "source_unavailable",
+        "Directory listing is incomplete",
+        422,
+      );
     return (d.file?.DirEntries || []).map((x: any) => ({
       path: x.Path,
       name: x.Name || path.posix.basename(x.Path || ""),
       type: x.Type,
       size: x.Size,
     }));
+  }
+  async ownership(s: Snapshot): Promise<Ownership> {
+    if (s.target.provider === "github") return this.github.ownership(s);
+    try {
+      const status = await this.byted([
+        "codebase",
+        "mr",
+        "status",
+        String(s.target.number),
+        "-R",
+        s.target.repo,
+      ]);
+      if (status.merge_request?.source_commit_id !== s.head)
+        return unavailableOwnership(
+          s,
+          "Effective Codebase rules are unavailable for this historical head",
+        );
+      const groups = status.review?.review_rule_groups;
+      if (!Array.isArray(groups))
+        return unavailableOwnership(
+          s,
+          "Codebase did not return effective review rules",
+        );
+      const rules: OwnershipRule[] = groups
+        .filter((g: any) => g.Type === "owner_review")
+        .flatMap((g: any) =>
+          (g.ReviewRules || []).map((r: any) => ({
+            id: hash(`${s.id}:${r.Name}`).slice(0, 24),
+            path: safePath(r.Name),
+            revision: s.head,
+            approvalsRequired: r.ApprovalsRequired ?? undefined,
+            owners: [
+              ...new Set<string>(
+                (r.ReviewerSelectors || [])
+                  .map((x: any) => {
+                    if (typeof x.User?.Username === "string" && x.User.Username)
+                      return x.User.Username;
+                    if (
+                      typeof x.UserGroup?.Name === "string" &&
+                      x.UserGroup.Name
+                    )
+                      return `group:${x.UserGroup.Name}`;
+                    throw new AppError(
+                      "ownership_unsupported",
+                      "Unknown effective owner selector",
+                    );
+                  })
+                  .filter(Boolean),
+              ),
+            ],
+          })),
+        );
+      if (
+        new Set(rules.map((r) => r.path)).size !== rules.length ||
+        rules.some(
+          (r) => path.posix.basename(r.path) !== "OWNERS" || !r.owners.length,
+        )
+      )
+        return unavailableOwnership(
+          s,
+          "Some effective Codebase owner selectors cannot be resolved to a path and owner",
+        );
+      const result: Ownership = {
+        versionId: s.id,
+        provider: "codebase",
+        capturedAt: now(),
+        status: "complete",
+        rules,
+        files: [],
+        warnings: [],
+      };
+      type Entries = Awaited<ReturnType<Providers["tree"]>>;
+      const dirs = new Map<string, Promise<Entries | null>>();
+      const configs = new Map<string, Promise<{ noParent: boolean } | null>>();
+      const directory = (dir: string, side: Side): Promise<Entries | null> => {
+        const key = `${side}:${dir}`;
+        let promise = dirs.get(key);
+        if (!promise) {
+          if (dirs.size >= 256)
+            throw new AppError(
+              "ownership_limit",
+              "Ownership directory limit exceeded",
+            );
+          promise = (async () => {
+            if (dir !== ".") {
+              const parent = await directory(path.posix.dirname(dir), side);
+              const entry = parent?.find(
+                (e) => e.name === path.posix.basename(dir),
+              );
+              if (!entry) return null;
+              if (entry.type !== "directory")
+                throw new AppError(
+                  "ownership_unsupported",
+                  "Ownership path traverses an indirect entry",
+                );
+            }
+            return this.tree(s, dir, side);
+          })();
+          dirs.set(key, promise);
+        }
+        return promise;
+      };
+      const config = (dir: string, side: Side) => {
+        const key = `${side}:${dir}`;
+        if (!configs.has(key))
+          configs.set(
+            key,
+            (async () => {
+              const entries = await directory(dir, side);
+              if (!entries?.some((e) => e.name === "OWNERS")) return null;
+              const file = dir === "." ? "OWNERS" : `${dir}/OWNERS`;
+              return codebaseOwnerConfig(
+                (await this.source(s, file, side)).content,
+              );
+            })(),
+          );
+        return configs.get(key)!;
+      };
+      const candidates = s.files.flatMap((f) => [
+        { path: f.path, side: "new" as const },
+        { path: f.oldPath, side: "old" as const },
+      ]);
+      let next = 0;
+      await Promise.all(
+        Array.from({ length: Math.min(4, candidates.length) }, async () => {
+          while (next < candidates.length) {
+            const binding = candidates[next++];
+            try {
+              const entries = await directory(
+                path.posix.dirname(binding.path),
+                binding.side,
+              );
+              if (
+                !entries?.some(
+                  (e) => e.name === path.posix.basename(binding.path),
+                )
+              )
+                continue;
+              const matched: OwnershipRule[] = [];
+              for (const dir of ancestorDirectories(binding.path)) {
+                const c = await config(dir, binding.side);
+                if (!c) continue;
+                const name = dir === "." ? "OWNERS" : `${dir}/OWNERS`;
+                const rule = rules.find((r) => r.path === name);
+                if (!rule)
+                  throw new AppError(
+                    "ownership_unresolved",
+                    "A pinned OWNERS file is absent from the effective rules",
+                  );
+                matched.push(rule);
+                if (c.noParent) break;
+              }
+              result.files.push({
+                ...binding,
+                owners: [...new Set(matched.flatMap((r) => r.owners))].sort(),
+                ruleIds: matched.map((r) => r.id),
+                status: matched.length ? "resolved" : "unowned",
+              });
+            } catch {
+              result.status = "partial";
+              result.files.push({
+                ...binding,
+                owners: [],
+                ruleIds: [],
+                status: "unknown",
+              });
+              result.warnings.push(
+                `Cannot resolve pinned OWNERS rules for ${binding.side}:${binding.path}`,
+              );
+            }
+          }
+        }),
+      );
+      const latest = await this.byted([
+        "codebase",
+        "mr",
+        "get",
+        s.target.url,
+        "-R",
+        s.target.repo,
+      ]);
+      if (latest.version?.SourceCommitId !== s.head)
+        return unavailableOwnership(
+          s,
+          "The MR changed while ownership was read",
+        );
+      result.files.sort(
+        (a, b) => a.path.localeCompare(b.path) || a.side.localeCompare(b.side),
+      );
+      result.warnings = [...new Set(result.warnings)].slice(0, 32);
+      return result;
+    } catch {
+      return unavailableOwnership(
+        s,
+        "Codebase ownership could not be read; path-based review is available",
+      );
+    }
   }
   async publish(
     s: Snapshot,

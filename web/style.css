@@ -1836,3 +1836,88 @@ pre {
     max-width: 60vw;
   }
 }
+
+.guide-scope {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 12px;
+}
+.guide-scope label,
+.guide-scope form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.guide-scope select,
+.guide-scope input {
+  padding: 6px 9px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--soft);
+  max-width: 280px;
+}
+.guide-scope > .quiet {
+  margin-left: auto;
+}
+.scope-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.guide-context-label {
+  padding: 18px 8px 6px;
+  color: var(--accent);
+  font-size: 12px;
+}
+.module-responsibility {
+  font-size: 13px;
+  color: var(--muted);
+}
+.module-focus {
+  font-size: 13px;
+  margin: 14px 0;
+}
+.module-focus ul {
+  margin: 5px 0;
+  padding-left: 18px;
+}
+.scope-context {
+  margin-top: 28px;
+}
+.scope-context > article {
+  padding: 16px 0;
+  border-top: 1px solid var(--rule);
+}
+.scope-context h4 {
+  margin: 0 0 8px;
+}
+.scope-context .text-button {
+  display: block;
+}
+.scope-context-reason {
+  padding: 12px 16px;
+  background: #f5f8f2;
+  border-left: 2px solid var(--accent);
+  font-size: 13px;
+}
+.scope-owned {
+  color: var(--accent);
+  background: #f5f8f2;
+}
+@media (max-width: 640px) {
+  .guide-scope {
+    gap: 8px;
+  }
+  .guide-scope input {
+    width: min(55vw, 260px);
+  }
+  .guide-scope > .hint {
+    flex-basis: 100%;
+  }
+}

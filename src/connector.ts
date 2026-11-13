@@ -125,7 +125,16 @@ export async function startConnector(config: Config) {
           ),
         },
       };
-    if (!["models", "snapshot", "source", "tree", "publish"].includes(method))
+    if (
+      ![
+        "models",
+        "snapshot",
+        "source",
+        "tree",
+        "publish",
+        "ownership",
+      ].includes(method)
+    )
       throw new AppError(
         "method_denied",
         "Connector method is not allowed",
@@ -146,6 +155,9 @@ export async function startConnector(config: Config) {
           break;
         case "snapshot":
           data = await providers.snapshot(p.target);
+          break;
+        case "ownership":
+          data = await providers.ownership(p.snapshot);
           break;
         case "source":
           data = await providers.source(p.snapshot, p.path, p.side);

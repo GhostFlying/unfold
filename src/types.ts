@@ -49,6 +49,8 @@ export interface Snapshot {
   description: string;
   head: string;
   base: string;
+  targetHead?: string;
+  ownership?: Ownership;
   remoteVersion: string;
   repoId: string;
   mrId: string;
@@ -95,6 +97,7 @@ export interface Explanation {
   html: string;
   references: Reference[];
   guide?: ChangeGuide;
+  ownership?: Ownership;
   writingStyle?: WritingStyle;
   backend: Backend;
   model: string;
@@ -119,10 +122,37 @@ export interface ChangeGroup {
   title: string;
   category: string;
   summary: string;
+  responsibility?: string;
+  reviewFocus?: string[];
+  context?: { group: number; reason: string; referenceIds: string[] }[];
   points: ChangePoint[];
 }
 export interface ChangeGuide {
   groups: ChangeGroup[];
+}
+export interface OwnershipRule {
+  id: string;
+  path: string;
+  revision: string;
+  owners: string[];
+  pattern?: string;
+  line?: number;
+  approvalsRequired?: number;
+}
+export interface Ownership {
+  versionId: string;
+  provider: Target["provider"];
+  capturedAt: string;
+  status: "complete" | "partial" | "unavailable";
+  rules: OwnershipRule[];
+  files: {
+    path: string;
+    side: Side;
+    owners: string[];
+    ruleIds: string[];
+    status: "resolved" | "unowned" | "unknown";
+  }[];
+  warnings: string[];
 }
 export interface Run {
   id: string;
@@ -145,6 +175,7 @@ export interface Run {
   usage?: RunUsage;
   usageUnavailableReason?: string;
   writingStyle?: WritingStyle;
+  ownership?: Ownership;
   question?: string;
   context?: Reference;
   explanationId?: string;

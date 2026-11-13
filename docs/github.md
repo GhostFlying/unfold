@@ -35,6 +35,12 @@ The [GitHub compare API](https://docs.github.com/en/rest/commits/commits#compare
 
 Only github.com is supported by this adapter. GitHub Enterprise configuration is not included. GitHub authentication errors use `github_auth_required` (CLI exit 6); permission/rate-limit failures and unavailable resources retain distinct error codes. An HTTP 404 can also mean the logged-in account cannot access a private repository.
 
+## Path owners
+
+New analyses capture [CODEOWNERS declarations](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners) from the pinned PR target tip, independently of the diff merge base and fork/head rules. Location precedence is `.github/CODEOWNERS`, `CODEOWNERS`, then `docs/CODEOWNERS`; the first existing file wins. Matching is case-sensitive, the last matching rule wins, and a rule without owners clears ownership. Invalid patterns are skipped with warnings. Team names are not expanded, and declaration matching does not prove account permissions or review requests.
+
+Both old and new paths participate in a renamed file's reading scope. The saved rule revision and capture time are part of each explanation, so a later rule refresh cannot change an existing scoped share. Use `owners`, `guide --owner` / `--path`, and `share --owner` / `--path` through the same CLI/API as Codebase. Missing rules leave path-based review available. See [CLI scopes](cli.md#modules-and-reading-scopes).
+
 ## Deliberate comments
 
 Ordinary PR comments, submitted review bodies, inline comments and replies refresh from GitHub. Pending reviews and their unpublished comments are excluded. The original platform remains authoritative for discussion state.

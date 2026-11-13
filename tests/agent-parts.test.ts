@@ -37,7 +37,7 @@ createInterface({input:process.stdin}).on('line',line=>{
   assert.equal(m.result.success,true,JSON.stringify(m.result));
   if(m.id===100){
    ref=JSON.parse(m.result.contentItems[0].text).reference.id;
-   const group={title:'Cancellation',category:'Behavior',summary:'Check first',points:[{title:'Guard',summary:'Exit before acquiring',before:'Acquire first',after:'Check first',rationale:'Avoid wasted work',risks:['Source only'],files:['src/queue.ts'],referenceIds:[ref]}]};
+   const group={title:'Cancellation',category:'Behavior',summary:'Check first',responsibility:'Control admission',reviewFocus:['Check cancelled work'],context:[],points:[{title:'Guard',summary:'Exit before acquiring',before:'Acquire first',after:'Check first',rationale:'Avoid wasted work',risks:['Source only'],files:['src/queue.ts'],referenceIds:[ref]}]};
    pieces=[{kind:'overview',index:1,content:JSON.stringify({title:'Incremental result',summary:'Source-backed summary'})},{kind:'guide',index:1,content:JSON.stringify(group)},...Array.from({length:4},(_,i)=>({kind:'html',index:i+1,content:(i===0?'<h1>Incremental</h1><a data-unfold-ref="'+ref+'">Source</a>':'')+'<p>'+('PRIVATE-PART-SENTINEL '.repeat(300))+'</p>'}))];
   }
   const next=m.id-100;

@@ -25,6 +25,7 @@ import { parentCsp, exportHtml } from "./html.js";
 import { backendConnectionRevision } from "./connector-runtime.js";
 import { Service } from "./service.js";
 import { ArtifactDraft } from "./artifact-draft.js";
+import { projectGuide } from "./review-scope.js";
 
 const backend = z.enum(["traex", "codex"]);
 const modelProfile = z.object({
@@ -161,7 +162,12 @@ export async function createServer(service: Service, owner: boolean) {
     );
   });
   app.get("/api/v1/reviews/:id/guide", async (req) => {
-    const q = req.query as { explanationId?: string; point?: string };
+    const q = req.query as {
+      explanationId?: string;
+      point?: string;
+      owner?: string;
+      path?: string;
+    };
     const { review, version, explanation } = service.bundle(
       param(req, "id"),
       q.explanationId,
@@ -172,25 +178,45 @@ export async function createServer(service: Service, owner: boolean) {
         "This explanation has no logical change guide; generate a new explanation to add one",
         404,
       );
+    const projected = projectGuide(explanation, version, q);
     const groups = q.point
-      ? explanation.guide.groups.flatMap((g) => {
+      ? projected.groups.flatMap((g) => {
           const points = g.points.filter((p) => p.id === q.point);
           return points.length ? [{ ...g, points }] : [];
         })
-      : explanation.guide.groups;
-    if (!groups.length)
+      : projected.groups;
+    const contextGroups = q.point
+      ? projected.contextGroups.flatMap((c) => {
+          const points = c.group.points.filter((p) => p.id === q.point);
+          return points.length ? [{ ...c, group: { ...c.group, points } }] : [];
+        })
+      : projected.contextGroups;
+    if (q.point && !groups.length && !contextGroups.length)
       throw new AppError("not_found", "Change point not found", 404);
-    const ids = new Set(
-      groups.flatMap((g) => g.points.flatMap((p) => p.referenceIds)),
-    );
     return ok({
+      ...projected,
       reviewId: review.id,
       explanationId: explanation.id,
       versionId: version.id,
       summary: explanation.summary,
       groups,
-      references: explanation.references.filter((r) => ids.has(r.id)),
+      contextGroups,
     });
+  });
+  app.get("/api/v1/reviews/:id/owners", async (req) => {
+    const q = req.query as { versionId?: string; explanationId?: string };
+    if (owner && authenticated(req) && !q.explanationId)
+      return ok(await service.ownership(param(req, "id"), q.versionId));
+    const { explanation } = service.bundle(param(req, "id"), q.explanationId);
+    if (!explanation?.ownership)
+      throw new AppError(
+        "ownership_unavailable",
+        "This explanation has no saved ownership",
+        404,
+      );
+    if (q.versionId && q.versionId !== explanation.versionId)
+      throw new AppError("not_found", "Ownership version not shared", 404);
+    return ok(explanation.ownership);
   });
   app.get("/api/v1/reviews/:id/versions", async (req) => {
     const reviewId = param(req, "id");
@@ -235,7 +261,22 @@ export async function createServer(service: Service, owner: boolean) {
     service.review(reviewId);
     const explanationId = (req.query as any).explanationId;
     if (explanationId) service.bundle(reviewId, explanationId);
-    return ok({ url: shareUrl(service.config, reviewId, explanationId) });
+    const scope = req.query as { owner?: string; path?: string };
+    const url = new URL(shareUrl(service.config, reviewId, explanationId));
+    if (scope.owner || scope.path) {
+      const b = service.bundle(reviewId, explanationId);
+      if (!b.explanation)
+        throw new AppError("guide_unavailable", "No shared guide exists", 404);
+      const projected = projectGuide(b.explanation, b.version, scope);
+      url.pathname = new URL(
+        shareUrl(service.config, reviewId, b.explanation.id),
+      ).pathname;
+      if (projected.scope.owner)
+        url.searchParams.set("owner", projected.scope.owner);
+      if (projected.scope.path)
+        url.searchParams.set("path", projected.scope.path);
+    }
+    return ok({ url: url.toString() });
   });
   app.get("/api/v1/reviews/:id/export", async (req, res) => {
     const bundle = service.bundle(
@@ -396,6 +437,14 @@ export async function createServer(service: Service, owner: boolean) {
     app.get("/api/v1/activity", async () =>
       ok({ active: service.activeOperation() }),
     );
+    app.post("/api/v1/reviews/:id/owners/refresh", async (req) => {
+      const body = z
+        .object({ versionId: z.string().optional() })
+        .parse(req.body);
+      return ok(
+        await service.ownership(param(req, "id"), body.versionId, true),
+      );
+    });
     app.get("/api/v1/reviews", async () =>
       ok(service.store.list<Review>("review").map((r) => service.review(r.id))),
     );

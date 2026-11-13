@@ -76,6 +76,31 @@ test("CLI keeps subcommand --version distinct and parses errors as stable JSON",
       JSON.parse(run.stdout).data.requestedUrl,
       "/api/v1/runs/durable-run",
     );
+    for (const [args, expected] of [
+      [
+        ["guide", "r", "--owner", "runtime"],
+        "/api/v1/reviews/r/guide?owner=runtime",
+      ],
+      [
+        ["guide", "r", "--path", "src/native"],
+        "/api/v1/reviews/r/guide?path=src%2Fnative",
+      ],
+      [
+        ["share", "r", "--owner", "runtime"],
+        "/api/v1/reviews/r/share?owner=runtime",
+      ],
+      [
+        ["owners", "r", "--refresh", "--version", "v1"],
+        "/api/v1/reviews/r/owners/refresh",
+      ],
+    ] as [string[], string][]) {
+      const result = await cli(
+        ["--server", `http://127.0.0.1:${port}`, ...args],
+        root,
+      );
+      assert.equal(result.exit, 0, result.stderr);
+      assert.equal(JSON.parse(result.stdout).data.requestedUrl, expected);
+    }
     const activity = await cli(
       ["--server", `http://127.0.0.1:${port}`, "activity"],
       root,

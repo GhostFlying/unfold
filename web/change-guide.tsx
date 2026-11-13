@@ -5,21 +5,28 @@ import type {
   Reference,
   Snapshot,
 } from "../src/types.js";
+import { projectGuide, type ReviewScope } from "../src/review-scope.js";
 
 export function ChangeGuideView({
   explanation,
   version,
   onReference,
   renderDiff,
+  scope = {},
+  onScopeChange,
+  onRefreshOwnership,
 }: {
   explanation?: Omit<Explanation, "threadId">;
   version: Snapshot;
   onReference: (ref: Reference) => void;
   renderDiff: (file: FileDiff) => ReactNode;
+  scope?: ReviewScope;
+  onScopeChange?: (scope: ReviewScope) => void;
+  onRefreshOwnership?: () => void;
 }) {
   const [selected, setSelected] = useState<string>();
-  const groups = explanation?.guide?.groups;
-  if (!groups?.length)
+  const [pathDraft, setPathDraft] = useState(scope.path || "");
+  if (!explanation?.guide?.groups.length)
     return (
       <section className="guide-empty">
         <span className="mono subtle">// logical change guide</span>
@@ -30,9 +37,40 @@ export function ChangeGuideView({
         </p>
       </section>
     );
-  const points = groups.flatMap((g) => g.points);
-  const group = groups.find((g) => g.points.some((p) => p.id === selected));
+  let view: ReturnType<typeof projectGuide>;
+  try {
+    view = projectGuide(explanation, version, scope);
+  } catch (e: any) {
+    return (
+      <section className="guide-empty">
+        <p role="alert">{e.message}</p>
+        <button onClick={() => onScopeChange?.({})}>查看全部改动</button>
+      </section>
+    );
+  }
+  const groups = view.groups;
+  const directIds = new Set(groups.flatMap((g) => g.points.map((p) => p.id)));
+  const contextGroups = view.contextGroups.map((c) => ({
+    ...c,
+    group: {
+      ...c.group,
+      points: c.group.points.filter((p) => !directIds.has(p.id)),
+    },
+  }));
+  const visibleGroups = [...groups, ...contextGroups.map((c) => c.group)];
+  const points = visibleGroups.flatMap((g) => g.points);
+  const group = visibleGroups.find((g) =>
+    g.points.some((p) => p.id === selected),
+  );
   const point = points.find((p) => p.id === selected);
+  const contextEntry = contextGroups.find((c) =>
+    c.group.points.some((p) => p.id === selected),
+  );
+  const scoped = !!(scope.owner || scope.path);
+  const choose = (next: ReviewScope) => {
+    setSelected(undefined);
+    onScopeChange?.(next);
+  };
   const index = point ? points.indexOf(point) : -1;
   const refs = explanation!.references.filter((r) =>
     point?.referenceIds.includes(r.id),
@@ -42,6 +80,81 @@ export function ChangeGuideView({
   );
   return (
     <section className="change-guide" aria-label="逻辑改动导览">
+      <div className="guide-scope">
+        <label>
+          阅读范围{" "}
+          <select
+            aria-label="阅读范围"
+            value={scope.owner ? "owner" : scope.path ? "path" : "all"}
+            onChange={(e) => {
+              if (e.target.value === "owner") choose({ owner: view.owners[0] });
+              else if (e.target.value === "path") {
+                const first = version.files[0]?.path || "src";
+                setPathDraft(first);
+                choose({ path: first });
+              } else choose({});
+            }}
+          >
+            <option value="all">全部改动</option>
+            <option value="owner" disabled={!view.owners.length}>
+              按 owner
+            </option>
+            <option value="path">按路径</option>
+          </select>
+        </label>
+        {scope.owner ? (
+          <select
+            aria-label="路径 owner"
+            value={view.scope.owner || scope.owner}
+            onChange={(e) => choose({ owner: e.target.value })}
+          >
+            {view.owners.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </select>
+        ) : null}
+        {scope.path ? (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              choose({ path: pathDraft });
+            }}
+          >
+            <input
+              aria-label="审查路径"
+              value={pathDraft}
+              onChange={(e) => setPathDraft(e.target.value)}
+            />
+            <button className="quiet">应用路径</button>
+          </form>
+        ) : null}
+        <span className="hint">
+          {scoped
+            ? `${groups.reduce((n, g) => n + g.points.length, 0)} 个相关修改点 · ${contextGroups.length} 个背景模块`
+            : "同一份讲解 · 按职责组织"}
+        </span>
+        {onRefreshOwnership ? (
+          <button className="quiet" onClick={onRefreshOwnership}>
+            更新 owner 规则
+          </button>
+        ) : null}
+      </div>
+      {!view.modular ? (
+        <p className="scope-note">
+          这份历史讲解尚未包含模块职责与跨模块关联。可继续按路径阅读已有修改点。
+        </p>
+      ) : null}
+      {!view.ownership ? (
+        <p className="scope-note">
+          这份历史讲解没有保存路径 owner；可按路径选择阅读范围。
+        </p>
+      ) : view.ownership.status !== "complete" ? (
+        <p className="scope-note">
+          部分路径 owner 尚不明确；可按路径阅读。{view.ownership.warnings[0]}
+        </p>
+      ) : null}
       <nav className="change-guide-nav" aria-label="修改点导航">
         <button
           className={
@@ -52,7 +165,8 @@ export function ChangeGuideView({
         >
           改动总览{" "}
           <span>
-            {groups.length} 组 · {points.length} 项
+            {groups.length} 组 ·{" "}
+            {groups.reduce((n, g) => n + g.points.length, 0)} 项
           </span>
         </button>
         {groups.map((g, i) => (
@@ -73,6 +187,23 @@ export function ChangeGuideView({
             ))}
           </div>
         ))}
+        {contextGroups.length ? (
+          <div className="guide-context-label">需要了解的背景</div>
+        ) : null}
+        {contextGroups.map((c) => (
+          <div className="guide-nav-group" key={`context:${c.group.id}`}>
+            <div className="guide-group-label">{c.group.title}</div>
+            {c.group.points.map((p) => (
+              <button
+                key={p.id}
+                className={selected === p.id ? "selected" : ""}
+                onClick={() => setSelected(p.id)}
+              >
+                {p.title} <span className="hint">背景</span>
+              </button>
+            ))}
+          </div>
+        ))}
       </nav>
       <div className="change-guide-content">
         {!point ? (
@@ -80,7 +211,8 @@ export function ChangeGuideView({
             <div className="guide-eyebrow mono">
               // review by intent · {version.head.slice(0, 8)}
             </div>
-            <h2>从修改目的开始阅读。</h2>
+            <h2>{scoped ? "从你的审查范围开始。" : "从修改目的开始阅读。"}</h2>
+            <span className="guide-eyebrow">整体背景</span>
             <p className="guide-intro">{explanation!.summary}</p>
             <div className="guide-overview-groups">
               {groups.map((g, i) => (
@@ -94,6 +226,35 @@ export function ChangeGuideView({
                   </div>
                   <h3>{g.title}</h3>
                   <p>{g.summary}</p>
+                  {g.responsibility ? (
+                    <p className="module-responsibility">
+                      职责：{g.responsibility}
+                    </p>
+                  ) : null}
+                  {g.context?.length ? (
+                    <div className="module-context-links">
+                      {g.context.map((c) => (
+                        <p key={c.group}>
+                          <span className="hint">
+                            关联背景 ·{" "}
+                            {explanation.guide!.groups[c.group - 1]?.title}
+                          </span>
+                          <br />
+                          {c.reason}
+                        </p>
+                      ))}
+                    </div>
+                  ) : null}
+                  {g.reviewFocus?.length ? (
+                    <div className="module-focus">
+                      <strong>建议审查</strong>
+                      <ul>
+                        {g.reviewFocus.map((f) => (
+                          <li key={f}>{f}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                   {g.points.map((p) => (
                     <button key={p.id} onClick={() => setSelected(p.id)}>
                       <span>{p.title}</span>
@@ -103,6 +264,32 @@ export function ChangeGuideView({
                 </article>
               ))}
             </div>
+            {!groups.length ? (
+              <p className="hint">这个范围内没有已记录的修改点。</p>
+            ) : null}
+            {contextGroups.length ? (
+              <section className="scope-context" aria-label="跨模块背景">
+                <h3>这些修改也需要了解</h3>
+                {contextGroups.map((c) => (
+                  <article key={c.group.id}>
+                    <h4>{c.group.title}</h4>
+                    {c.reasons.map((r) => (
+                      <p key={r.from}>{r.reason}</p>
+                    ))}
+                    <p className="hint">{c.group.summary}</p>
+                    {c.group.points.map((p) => (
+                      <button
+                        className="text-button"
+                        key={p.id}
+                        onClick={() => setSelected(p.id)}
+                      >
+                        {p.title} ↗
+                      </button>
+                    ))}
+                  </article>
+                ))}
+              </section>
+            ) : null}
           </>
         ) : (
           <article className="change-point" aria-label="修改点说明">
@@ -115,6 +302,29 @@ export function ChangeGuideView({
             </div>
             <h2>{point.title}</h2>
             <p className="guide-intro">{point.summary}</p>
+            {contextEntry ? (
+              <div className="scope-context-reason">
+                <strong>这是理解所选范围所需的背景</strong>
+                {contextEntry.reasons.map((r) => (
+                  <p key={r.from}>{r.reason}</p>
+                ))}
+              </div>
+            ) : null}
+            {group?.responsibility ? (
+              <p className="module-responsibility">
+                模块职责：{group.responsibility}
+              </p>
+            ) : null}
+            {group?.reviewFocus?.length ? (
+              <div className="module-focus">
+                <strong>本模块审查重点</strong>
+                <ul>
+                  {group.reviewFocus.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
             <div className="guide-before-after">
               <section>
                 <h3>修改前</h3>
@@ -172,6 +382,15 @@ export function ChangeGuideView({
               <h3>
                 相关文件与 Diff <span>{files.length}</span>
               </h3>
+              {scoped ? (
+                <p className="scope-owned">
+                  所选范围：
+                  {point.files
+                    .filter((f) => view.focusFiles.includes(f))
+                    .join("、") || "关联背景"}
+                  。保留本修改点的完整逻辑。
+                </p>
+              ) : null}
               {files.map(renderDiff)}
             </section>
             <footer className="guide-point-nav">

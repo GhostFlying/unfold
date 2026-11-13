@@ -408,12 +408,44 @@ program
   .description("Read logical change groups or one change point")
   .option("--explanation <id>")
   .option("--point <id>")
+  .option("--owner <name>", "Select a saved path owner")
+  .option("--path <path>", "Select a repository file or directory")
   .action(
     wrap(async (review, o) => {
       const query = new URLSearchParams();
       if (o.explanation) query.set("explanationId", o.explanation);
       if (o.point) query.set("point", o.point);
+      if (o.owner) query.set("owner", o.owner);
+      if (o.path) query.set("path", o.path);
       out(await api(`/reviews/${review}/guide?${query}`));
+    }),
+  );
+program
+  .command("owners <review>")
+  .description("Read or explicitly refresh path ownership for a version")
+  .option("--version <id>")
+  .option("--explanation <id>")
+  .option(
+    "--refresh",
+    "Refresh owner-only cached rules; existing explanations stay frozen",
+  )
+  .action(
+    wrap(async (review, o) => {
+      if (o.refresh && o.explanation)
+        throw new AppError(
+          "invalid_input",
+          "An explanation's saved ownership cannot be refreshed",
+        );
+      const query = new URLSearchParams();
+      if (o.version) query.set("versionId", o.version);
+      if (o.explanation) query.set("explanationId", o.explanation);
+      out(
+        await api(
+          `/reviews/${review}/owners${o.refresh ? "/refresh" : "?" + query}`,
+          o.refresh ? "POST" : "GET",
+          o.refresh ? { versionId: o.version } : undefined,
+        ),
+      );
     }),
   );
 program.command("backend <review> <backend>").action(
@@ -565,14 +597,16 @@ program
 program
   .command("share <review>")
   .option("--explanation <id>")
+  .option("--owner <name>")
+  .option("--path <path>")
   .action(
-    wrap(async (review, o) =>
-      out(
-        await api(
-          `/reviews/${review}/share${o.explanation ? `?explanationId=${o.explanation}` : ""}`,
-        ),
-      ),
-    ),
+    wrap(async (review, o) => {
+      const q = new URLSearchParams();
+      if (o.explanation) q.set("explanationId", o.explanation);
+      if (o.owner) q.set("owner", o.owner);
+      if (o.path) q.set("path", o.path);
+      out(await api(`/reviews/${review}/share?${q}`));
+    }),
   );
 program
   .command("export <review>")

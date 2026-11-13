@@ -17,6 +17,7 @@ import { RunActivity, RunUsage } from "./run-activity.js";
 import { applyRunEvent } from "../src/telemetry.js";
 import { ChangeGuideView } from "./change-guide.js";
 import { ReviewAgentControls } from "./review-agent-controls.js";
+import type { ReviewScope } from "../src/review-scope.js";
 
 type Bundle = {
   review: Review;
@@ -42,11 +43,20 @@ export function ReviewPage({
   onChange: () => Promise<void>;
 }) {
   const [bundle, setBundle] = useState<Bundle>(),
+    [scope, setScope] = useState<ReviewScope>(() => {
+      const q = new URLSearchParams(location.search);
+      return {
+        owner: q.get("owner") || undefined,
+        path: q.get("path") || undefined,
+      };
+    }),
     [runs, setRuns] = useState<Run[]>([]),
     [drafts, setDrafts] = useState<Draft[]>([]),
     [approvals, setApprovals] = useState<Approval[]>([]),
     [history, setHistory] = useState<Explanation[]>([]),
-    [tab, setTab] = useState("explanation"),
+    [tab, setTab] = useState(() =>
+      /[?&](?:owner|path)=/.test(location.search) ? "guide" : "explanation",
+    ),
     [panel, setPanel] = useState(""),
     [selected, setSelected] = useState<Reference>(),
     [source, setSource] = useState<Source>(),
@@ -262,9 +272,12 @@ export function ReviewPage({
                 className="quiet"
                 onClick={() =>
                   action(async () => {
-                    const { url } = await api(
-                      `/reviews/${id}/share${explanationId ? `?explanationId=${explanationId}` : ""}`,
-                    );
+                    const query = new URLSearchParams();
+                    if (explanationId)
+                      query.set("explanationId", explanationId);
+                    if (scope.owner) query.set("owner", scope.owner);
+                    if (scope.path) query.set("path", scope.path);
+                    const { url } = await api(`/reviews/${id}/share?${query}`);
                     await navigator.clipboard.writeText(url);
                     setNotice("已复制公司内网只读链接");
                   })
@@ -425,6 +438,36 @@ export function ReviewPage({
               key={explanation?.id || id}
               explanation={explanation}
               version={version}
+              scope={scope}
+              onScopeChange={(next) => {
+                setScope(next);
+                const url = new URL(location.href);
+                url.searchParams.delete("owner");
+                url.searchParams.delete("path");
+                if (next.owner) url.searchParams.set("owner", next.owner);
+                if (next.path) url.searchParams.set("path", next.path);
+                window.history.replaceState(
+                  null,
+                  "",
+                  url.pathname + url.search + url.hash,
+                );
+              }}
+              onRefreshOwnership={
+                owner
+                  ? () => {
+                      void action(async () => {
+                        const rules = await api(
+                          `/reviews/${id}/owners/refresh`,
+                          "POST",
+                          {},
+                        );
+                        setNotice(
+                          `路径规则已更新（${rules.status}），将用于下一次讲解。当前讲解使用保存的规则快照。`,
+                        );
+                      });
+                    }
+                  : undefined
+              }
               onReference={(ref) => {
                 void action(() => openReference(ref));
               }}

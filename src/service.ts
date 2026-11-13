@@ -17,6 +17,7 @@ import {
   type Run,
   type Snapshot,
   type Source,
+  type Ownership,
 } from "./types.js";
 import { hash, id, now } from "./util.js";
 import { diffLines, validateAnchor } from "./diff.js";
@@ -264,6 +265,34 @@ export class Service {
       stopping: !!this.controllers.get(runId)?.signal.aborted,
     };
   }
+  async ownership(
+    reviewId: string,
+    versionId?: string,
+    refresh = false,
+  ): Promise<Ownership> {
+    const s = this.version(reviewId, versionId),
+      key = hash(`${reviewId}:${s.id}:ownership`).slice(0, 32);
+    const saved = this.store.maybe<Ownership>("ownership", key);
+    if (saved && !refresh) return saved;
+    let value: Ownership;
+    try {
+      value = await this.rpc<Ownership>("ownership", { snapshot: s });
+      if (value.versionId !== s.id)
+        throw new Error("Ownership version mismatch");
+    } catch {
+      value = {
+        versionId: s.id,
+        provider: s.target.provider,
+        capturedAt: now(),
+        status: "unavailable",
+        rules: [],
+        files: [],
+        warnings: ["Ownership is unavailable; use a path scope"],
+      };
+    }
+    this.store.put("ownership", { ...value, id: key, reviewId });
+    return value;
+  }
   private requireIdle() {
     if (this.controllers.size)
       throw new AppError(
@@ -395,6 +424,23 @@ export class Service {
   private async drive(run: Run, params: unknown, controller: AbortController) {
     let result = false;
     try {
+      if (run.kind === "analysis") {
+        this.record(run.id, {
+          type: "status",
+          stage: "investigating",
+          message: "正在读取路径审查规则",
+        });
+        run.ownership = await this.ownership(run.reviewId, run.versionId, true);
+        if (controller.signal.aborted) return;
+        this.store.put("run", {
+          ...this.store.get<Run>("run", run.id),
+          ownership: run.ownership,
+        });
+        (params as { snapshot: Snapshot }).snapshot = {
+          ...(params as { snapshot: Snapshot }).snapshot,
+          ownership: run.ownership,
+        };
+      }
       await connectorStream(
         this.config.socketPath,
         this.token,
@@ -468,6 +514,7 @@ export class Service {
                 cliVersion: run.cliVersion,
                 threadId: run.threadId,
                 writingStyle: run.writingStyle,
+                ownership: run.ownership,
                 createdAt: now(),
               };
               this.store.put("explanation", e);

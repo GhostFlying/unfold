@@ -1,4 +1,75 @@
 import { test, expect, type Page } from "@playwright/test";
+test("saved owner/path views retain overall context, navigate other modules and survive readonly scoped links without generation", async ({
+  page,
+}) => {
+  const errors: string[] = [],
+    agentWrites: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  page.on("request", (r) => {
+    if (
+      r.method() === "POST" &&
+      /\/(analyze|questions|owners\/refresh)(?:\?|$)/.test(r.url())
+    )
+      agentWrites.push(r.url());
+  });
+  await page.goto("/");
+  await page
+    .getByLabel("所有者密钥")
+    .fill("synthetic-test-owner-key-not-a-real-credential");
+  await page.getByRole("button", { name: "打开工作区" }).click();
+  await page.getByText("Review by module", { exact: true }).click();
+  await page.getByRole("button", { name: "改动导览", exact: true }).click();
+  const guide = page.getByRole("region", { name: "逻辑改动导览" });
+  await guide.getByLabel("阅读范围", { exact: true }).selectOption("owner");
+  await guide.getByLabel("路径 owner", { exact: true }).selectOption("runtime");
+  await expect(guide).toContainText("1 个相关修改点 · 1 个背景模块");
+  await expect(guide).toContainText("整体背景");
+  await expect(guide).toContainText("资源释放依赖共享接口的新回调约定");
+  await expect(guide).toContainText("核对取消后是否释放资源");
+  expect(new URL(page.url()).searchParams.get("owner")).toBe("runtime");
+  await page.screenshot({ path: "/tmp/unfold-module-owner-desktop.png" });
+  await guide
+    .getByRole("navigation", { name: "修改点导航" })
+    .getByRole("button", { name: /共享接口约定/ })
+    .click();
+  await expect(
+    guide.getByRole("article", { name: "修改点说明" }),
+  ).toContainText("这是理解所选范围所需的背景");
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth > innerWidth,
+    ),
+  ).toBe(false);
+  await page.screenshot({ path: "/tmp/unfold-module-owner-mobile.png" });
+  await page.reload();
+  await expect(guide.getByLabel("路径 owner")).toHaveValue("runtime");
+  const reviewId = new URL(page.url()).pathname.split("/").at(-1)!;
+  const response = await page.request.get(
+    `/api/v1/reviews/${reviewId}/share?owner=runtime`,
+  );
+  const shared = new URL((await response.json()).data.url);
+  expect(shared.pathname).toContain("/v/module-explanation");
+  await page.goto("http://127.0.0.1:19370" + shared.pathname + shared.search);
+  await expect(guide.getByLabel("路径 owner")).toHaveValue("runtime");
+  await expect(
+    page.getByRole("button", { name: "更新 owner 规则" }),
+  ).toHaveCount(0);
+  await guide.getByLabel("阅读范围", { exact: true }).selectOption("path");
+  await guide.getByLabel("审查路径").fill("src/");
+  await guide.getByRole("button", { name: "应用路径" }).click();
+  await expect(guide).toContainText("1 个相关修改点 · 1 个背景模块");
+  await guide
+    .getByRole("navigation", { name: "修改点导航" })
+    .getByRole("button", { name: "把取消检查前移", exact: true })
+    .click();
+  await guide.getByRole("button", { name: /src\/queue.ts:2/ }).click();
+  await expect(page.locator(".source-body")).toContainText(
+    "if (item.cancelled) return;",
+  );
+  expect(errors).toEqual([]);
+  expect(agentWrites).toEqual([]);
+});
 test("a different review occupying the global slot is visible and disables only submission until released", async ({
   page,
 }) => {

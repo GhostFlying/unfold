@@ -7,9 +7,11 @@ import {
   type Snapshot,
   type Source,
   type Target,
+  type Ownership,
 } from "./types.js";
 import { command, hash, now, safePath } from "./util.js";
 import { diffLines, validateAnchor } from "./diff.js";
+import { codeownersRules, unavailableOwnership } from "./ownership-rules.js";
 
 const shaPattern = /^[a-f0-9]{40}$/;
 const maxFiles = 300;
@@ -336,6 +338,7 @@ export class GitHub {
       description: meta.body || "",
       head,
       base,
+      targetHead: tip,
       remoteVersion: head.slice(0, 12),
       repoId: String(meta.base.repo.id),
       mrId: String(meta.id),
@@ -384,6 +387,90 @@ export class GitHub {
       });
     }
     return pending;
+  }
+  async ownership(s: Snapshot): Promise<Ownership> {
+    try {
+      let targetHead = s.targetHead;
+      if (!targetHead) {
+        // Older snapshots stored only the merge base. Recover current rules only
+        // when the live PR still has this exact reviewed comparison; never edit
+        // the immutable snapshot or attach current rules to a different version.
+        const repo = this.repo(s.target),
+          prefix = `repos/${repo}/pulls/${s.target.number}`;
+        const meta = await this.api(prefix);
+        if (meta.head?.sha !== s.head || !shaPattern.test(meta.base?.sha || ""))
+          throw new AppError(
+            "revision_changed",
+            "Cannot recover historical target rules",
+            409,
+          );
+        targetHead = meta.base.sha;
+        const comparison = await this.api(
+          `repos/${repo}/compare/${targetHead}...${s.head}?per_page=1`,
+        );
+        const latest = await this.api(prefix);
+        if (
+          comparison.merge_base_commit?.sha !== s.base ||
+          comparison.base_commit?.sha !== targetHead ||
+          latest.head?.sha !== s.head ||
+          latest.base?.sha !== targetHead
+        )
+          throw new AppError(
+            "revision_changed",
+            "The PR changed while capturing rules",
+            409,
+          );
+      }
+      if (!shaPattern.test(targetHead!))
+        throw new AppError("missing_revision", "Invalid target tip", 422);
+      const target = { ...s, head: targetHead! };
+      let content: string | undefined,
+        file = "";
+      for (const candidate of [
+        ".github/CODEOWNERS",
+        "CODEOWNERS",
+        "docs/CODEOWNERS",
+      ]) {
+        try {
+          content = (await this.source(target, candidate, "new")).content;
+          file = candidate;
+          break;
+        } catch (e: any) {
+          if (e.code !== "source_not_found") throw e;
+        }
+      }
+      const parsed =
+        content === undefined
+          ? undefined
+          : codeownersRules(content, file, targetHead!);
+      const result: Ownership = {
+        versionId: s.id,
+        provider: "github",
+        capturedAt: now(),
+        status: "complete",
+        rules: parsed?.rules || [],
+        files: [],
+        warnings: parsed?.warnings.slice(0, 32) || [],
+      };
+      for (const f of s.files)
+        for (const side of ["old", "new"] as const) {
+          const p = side === "old" ? f.oldPath : f.path,
+            rule = parsed?.match(p);
+          result.files.push({
+            path: p,
+            side,
+            owners: rule?.owners || [],
+            ruleIds: rule ? [rule.id] : [],
+            status: rule?.owners.length ? "resolved" : "unowned",
+          });
+        }
+      return result;
+    } catch {
+      return unavailableOwnership(
+        s,
+        "Pinned GitHub CODEOWNERS could not be read; path-based review is available",
+      );
+    }
   }
 
   private async locate(
