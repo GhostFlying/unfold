@@ -430,6 +430,33 @@ test("transport ambiguity stays unknown until platform readback finds the public
     f.cleanup();
   }
 });
+test("refresh updates agent stack context on the same revision without sharing it as snapshot data", async () => {
+  const f = fixture();
+  try {
+    const { review } = await seed(f.service);
+    const previous = f.service.version(review.id);
+    f.service.current.stackContext = {
+      source: "lynxstack",
+      status: "confirmed",
+      targetBranch: "develop",
+      parent: { number: 41, head: snapshot.base },
+      child: "unknown",
+    };
+    const refreshed = await f.service.refresh(review.id);
+    assert.equal(refreshed.latestVersionId, previous.id);
+    assert.deepEqual(f.service.version(review.id), {
+      ...previous,
+      stackContext: f.service.current.stackContext,
+    });
+    assert.ok(!("stackContext" in refreshed.version));
+
+    delete f.service.current.stackContext;
+    await f.service.refresh(review.id);
+    assert.deepEqual(f.service.version(review.id), previous);
+  } finally {
+    f.cleanup();
+  }
+});
 test("an explicitly converted general comment moves to the current version", async () => {
   const f = fixture();
   try {

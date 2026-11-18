@@ -130,8 +130,15 @@ export class Service {
   async refresh(reviewId: string) {
     const r = this.review(reviewId);
     const fresh = await this.rpc<Snapshot>("snapshot", { target: r.target });
-    if (!this.store.maybe("version", fresh.id))
-      this.store.put("version", { ...fresh, reviewId });
+    const saved = this.store.maybe<Snapshot & { reviewId: string }>(
+      "version",
+      fresh.id,
+    );
+    if (!saved) this.store.put("version", { ...fresh, reviewId });
+    else if (
+      JSON.stringify(saved.stackContext) !== JSON.stringify(fresh.stackContext)
+    )
+      this.store.put("version", { ...saved, stackContext: fresh.stackContext });
     this.store.put("discussion", { id: reviewId, comments: fresh.comments });
     r.title = fresh.title;
     r.versionId = fresh.id;
@@ -147,7 +154,7 @@ export class Service {
         : undefined;
     if (explanation && explanation.reviewId !== reviewId)
       throw new AppError("not_found", "Explanation not found", 404);
-    const version = this.version(
+    const version = this.readerVersion(
       reviewId,
       explanation?.versionId || r.versionId,
     );
@@ -163,6 +170,10 @@ export class Service {
         this.store.maybe<{ comments: unknown[] }>("discussion", reviewId)
           ?.comments || version.comments,
     };
+  }
+  readerVersion(reviewId: string, versionId?: string) {
+    const { stackContext, ...version } = this.version(reviewId, versionId);
+    return version;
   }
   publicExplanation(e: Explanation) {
     const { threadId, ...publicFields } = e;

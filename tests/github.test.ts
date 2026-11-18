@@ -19,6 +19,7 @@ function ghFixture(repo = "example/repo") {
   const target = githubTarget(repo, 42);
   const calls: { args: string[]; endpoint?: string; body?: any }[] = [];
   const meta = {
+    stack: undefined as unknown,
     id: 42,
     title: "Make return value explicit",
     body: "A fork PR",
@@ -206,6 +207,52 @@ test("GitHub URL validation and provider dispatch preserve canonical PR identity
   } finally {
     f.cleanup();
   }
+});
+
+test("GitHub adds only adjacent stack context for the pinned PR revision", async () => {
+  const g = ghFixture();
+  g.meta.stack = { number: 8, position: 2, size: 3, base: { ref: "main" } };
+  const endpoint = "repos/example/repo/stacks/8";
+  const current = { number: 42, head: { sha: head }, base: { sha: tip } };
+  g.responses.set(endpoint, {
+    number: 8,
+    base: { ref: "main" },
+    pull_requests: [
+      { number: 41, head: { sha: tip } },
+      current,
+      { number: 43, head: { sha: dir } },
+    ],
+  });
+  const snapshot = await g.gh.snapshot(target);
+  assert.equal(snapshot.base, base);
+  assert.equal(snapshot.files.length, 1);
+  assert.deepEqual(snapshot.stackContext, {
+    source: "github",
+    status: "confirmed",
+    number: 8,
+    position: 2,
+    size: 3,
+    targetBranch: "main",
+    parent: {
+      number: 41,
+      url: "https://github.com/example/repo/pull/41",
+      head: tip,
+    },
+    child: {
+      number: 43,
+      url: "https://github.com/example/repo/pull/43",
+      head: dir,
+    },
+  });
+
+  current.head.sha = blobSha;
+  const stale = await g.gh.snapshot(target);
+  assert.equal(stale.id, snapshot.id);
+  assert.deepEqual(stale.stackContext, {
+    ...snapshot.stackContext,
+    parent: "unknown",
+    child: "unknown",
+  });
 });
 
 test("GitHub snapshot rejects moved refs and incomplete or oversized comparisons", async () => {

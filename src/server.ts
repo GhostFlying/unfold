@@ -250,7 +250,7 @@ export async function createServer(service: Service, owner: boolean) {
   });
   app.get("/api/v1/reviews/:id/snapshot", async (req) =>
     ok(
-      service.version(
+      service.readerVersion(
         param(req, "id"),
         (req.query as any).versionId ||
           (!(owner && authenticated(req))

@@ -5,6 +5,7 @@ import {
   type Comment,
   type Side,
   type Snapshot,
+  type StackContext,
   type Source,
   type Target,
   type Ownership,
@@ -24,7 +25,11 @@ type TreeEntry = {
   sha: string;
   size?: number;
 };
-export type GhRunner = (args: string[], input?: string) => Promise<string>;
+export type GhRunner = (
+  args: string[],
+  input?: string,
+  timeout?: number,
+) => Promise<string>;
 
 export function githubTarget(repo: string, number: number): Target {
   if (
@@ -46,7 +51,7 @@ export function githubTarget(repo: string, number: number): Target {
   };
 }
 
-async function runGh(args: string[], input?: string) {
+async function runGh(args: string[], input?: string, timeout?: number) {
   const env = {
     ...process.env,
     GH_PROMPT_DISABLED: "1",
@@ -54,7 +59,7 @@ async function runGh(args: string[], input?: string) {
     GH_PAGER: "cat",
   };
   delete (env as NodeJS.ProcessEnv).GH_DEBUG;
-  return command("gh", args, { input, env });
+  return command("gh", args, { input, env, ...(timeout ? { timeout } : {}) });
 }
 
 export class GitHub {
@@ -71,7 +76,7 @@ export class GitHub {
     return githubTarget(t.repo, t.number).repo;
   }
 
-  async api(endpoint: string, body?: object): Promise<any> {
+  async api(endpoint: string, body?: object, timeout?: number): Promise<any> {
     let result: string;
     try {
       const args = [
@@ -92,6 +97,7 @@ export class GitHub {
           result = await this.run(
             args,
             body ? JSON.stringify(body) : undefined,
+            timeout,
           );
           break;
         } catch (error: any) {
@@ -99,6 +105,7 @@ export class GitHub {
           // A failed POST may already exist remotely and must be reconciled.
           if (
             body ||
+            timeout ||
             attempt >= 2 ||
             !/HTTP (?:502|503|504)\b/i.test(String(error.message))
           )
@@ -240,6 +247,67 @@ export class GitHub {
     return comments;
   }
 
+  private async stackContext(
+    target: Target,
+    meta: any,
+  ): Promise<StackContext | undefined> {
+    const membership = meta.stack;
+    if (membership == null) return;
+    const { number, position, size, base } = membership;
+    if (
+      !Number.isSafeInteger(number) ||
+      number < 1 ||
+      !Number.isSafeInteger(size) ||
+      size < 1 ||
+      !Number.isSafeInteger(position) ||
+      position < 1 ||
+      position > size
+    )
+      return { source: "github", status: "unknown" };
+
+    const context: StackContext = {
+      source: "github",
+      status: "confirmed",
+      number,
+      position,
+      size,
+      targetBranch: typeof base?.ref === "string" ? base.ref : undefined,
+      parent: position > 1 ? "unknown" : null,
+      child: position < size ? "unknown" : null,
+    };
+    if (size === 1) return context;
+    const stack = await this.api(
+      `repos/${target.repo}/stacks/${number}`,
+      undefined,
+      5_000,
+    ).catch(() => undefined);
+    const entries = stack?.pull_requests;
+    const current = Array.isArray(entries) ? entries[position - 1] : undefined;
+    if (
+      stack?.number !== number ||
+      stack?.base?.ref !== base?.ref ||
+      entries?.length !== size ||
+      current?.number !== target.number ||
+      current.head?.sha !== meta.head.sha ||
+      current.base?.sha !== meta.base.sha
+    )
+      return context;
+    const neighbor = (entry: any) =>
+      Number.isSafeInteger(entry?.number) &&
+      entry.number > 0 &&
+      entry.number !== target.number &&
+      shaPattern.test(entry.head?.sha || "")
+        ? {
+            number: entry.number,
+            url: githubTarget(target.repo, entry.number).url,
+            head: entry.head.sha,
+          }
+        : ("unknown" as const);
+    if (position > 1) context.parent = neighbor(entries[position - 2]);
+    if (position < size) context.child = neighbor(entries[position]);
+    return context;
+  }
+
   async snapshot(target: Target): Promise<Snapshot> {
     const repo = this.repo(target),
       prefix = `repos/${repo}/pulls/${target.number}`;
@@ -339,6 +407,7 @@ export class GitHub {
       head,
       base,
       targetHead: tip,
+      stackContext: await this.stackContext(target, latest),
       remoteVersion: head.slice(0, 12),
       repoId: String(meta.base.repo.id),
       mrId: String(meta.id),

@@ -5,6 +5,8 @@ import {
   AppError,
   type Target,
   type Snapshot,
+  type StackContext,
+  type StackNeighbor,
   type Source,
   type Comment,
   type Side,
@@ -63,13 +65,49 @@ export function parseTarget(value: string, config: Config): Target {
 }
 export const identity = (t: Target) =>
   `${t.provider}:${t.host}:${t.repo.toLowerCase()}:${t.number}`;
+const codebaseStackTimeout = 5_000;
+const commitPattern = /^[a-f0-9]{40}$/;
+const changeIdPattern = /^I[a-f0-9]{40}$/i;
+
+function lynxstackTrailers(message: string) {
+  const footer =
+    message
+      .trimEnd()
+      .split(/\r?\n\s*\r?\n/)
+      .at(-1) || "";
+  const fields = new Map<string, string>();
+  for (const line of footer.split(/\r?\n/)) {
+    const match = /^(Lynxstack-[A-Za-z-]+): (\S+)$/.exec(line);
+    if (!match) continue;
+    if (fields.has(match[1])) return;
+    fields.set(match[1], match[2]);
+  }
+  const changeId = fields.get("Lynxstack-Change-Id");
+  const parent = fields.get("Lynxstack-Parent-Change-Id");
+  const target = fields.get("Lynxstack-Target-Branch");
+  if (
+    !changeId ||
+    !changeIdPattern.test(changeId) ||
+    (parent && (!changeIdPattern.test(parent) || parent === changeId)) ||
+    Boolean(parent) === Boolean(target)
+  )
+    return;
+  return { changeId, parent, target: target?.replace(/^origin\//, "") };
+}
+
 export class Providers {
   constructor(
     readonly config: Config,
     readonly github = new GitHub(),
   ) {}
-  async byted(args: string[]) {
-    const result = JSON.parse(await command("bytedcli", ["--json", ...args]));
+  async byted(args: string[], timeout?: number) {
+    const result = JSON.parse(
+      await command(
+        "bytedcli",
+        ["--json", ...args],
+        timeout ? { timeout } : {},
+      ),
+    );
     if (result.status !== "success")
       throw new AppError(
         "source_error",
@@ -78,6 +116,115 @@ export class Providers {
       );
     return result.data;
   }
+  private async codebaseStackContext(
+    target: Target,
+    mr: any,
+    head: string,
+    base: string,
+  ): Promise<StackContext | undefined> {
+    const read = (args: string[]) =>
+      this.byted([...args, "-R", target.repo], codebaseStackTimeout).catch(
+        () => undefined,
+      );
+    const data = await read(["codebase", "commit", "get", "--revision", head]);
+    const commit = data?.commit;
+    const commitVerified =
+      commit?.Id === head && typeof commit.Message === "string";
+    const trailers = commitVerified
+      ? lynxstackTrailers(commit.Message)
+      : undefined;
+    const parentId = mr.ParentMergeRequestId
+      ? String(mr.ParentMergeRequestId)
+      : undefined;
+    if (!trailers && !parentId)
+      return commitVerified
+        ? undefined
+        : { source: "codebase", status: "unknown" };
+
+    const neighbor = async (
+      revision: string,
+      matches: (candidate: any) => boolean,
+    ): Promise<StackNeighbor | "unknown"> => {
+      if (!commitPattern.test(revision)) return "unknown";
+      const list = await read([
+        "codebase",
+        "mr",
+        "list",
+        "--commit",
+        revision,
+        "--state",
+        "all",
+        "--limit",
+        "20",
+      ]);
+      if (
+        !Array.isArray(list?.merge_requests) ||
+        list.total_count !== list.merge_requests.length
+      )
+        return "unknown";
+      const candidates = list.merge_requests.filter(
+        (candidate: any) =>
+          Number.isSafeInteger(candidate?.Number) &&
+          candidate.Number > 0 &&
+          candidate.Number !== target.number &&
+          matches(candidate),
+      );
+      if (candidates.length !== 1) return "unknown";
+      const { Number: number, Id: id } = candidates[0];
+      const detail = await read(["codebase", "mr", "get", String(number)]);
+      const adjacent = detail?.merge_request;
+      const version = detail?.version;
+      if (
+        adjacent?.Number !== number ||
+        String(adjacent.Id) !== String(id) ||
+        !matches(adjacent) ||
+        !commitPattern.test(version?.SourceCommitId || "")
+      )
+        return "unknown";
+      return {
+        number,
+        url: new URL(String(number), target.url).href,
+        head: version.SourceCommitId,
+        remoteVersion:
+          version.Number == null ? undefined : String(version.Number),
+        changeId: changeIdPattern.test(adjacent.ChangeId || "")
+          ? adjacent.ChangeId
+          : undefined,
+      };
+    };
+    const [parent, child] = await Promise.all([
+      parentId
+        ? neighbor(
+            base,
+            (candidate) =>
+              String(candidate.Id) === parentId &&
+              (!trailers?.parent || candidate.ChangeId === trailers.parent),
+          )
+        : trailers?.parent
+          ? ("unknown" as const)
+          : null,
+      neighbor(
+        head,
+        (candidate) => String(candidate.ParentMergeRequestId) === String(mr.Id),
+      ),
+    ]);
+    return {
+      source: trailers ? "lynxstack" : "codebase",
+      status: "confirmed",
+      changeId: trailers?.changeId,
+      targetBranch:
+        trailers?.target ??
+        (typeof mr.TargetBranchName === "string"
+          ? mr.TargetBranchName
+          : undefined),
+      parent:
+        parent === "unknown" && trailers?.parent
+          ? { changeId: trailers.parent }
+          : parent,
+      child,
+    };
+  }
+
   async snapshot(target: Target): Promise<Snapshot> {
     if (target.provider === "github") return this.github.snapshot(target);
     const args = ["-R", target.repo];
@@ -95,7 +242,9 @@ export class Providers {
         "The platform did not return an immutable commit range",
         502,
       );
-    const [diff, discussions] = await Promise.all([
+    const head = v.SourceCommitId,
+      base = v.BaseCommitId || v.TargetCommitId;
+    const [diff, discussions, stackContext] = await Promise.all([
       this.byted([
         "codebase",
         "mr",
@@ -108,9 +257,8 @@ export class Providers {
         "500000",
       ]),
       this.byted(["codebase", "mr", "comment", "list", target.url, ...args]),
+      this.codebaseStackContext(target, meta.merge_request, head, base),
     ]);
-    const head = v.SourceCommitId,
-      base = v.BaseCommitId || v.TargetCommitId;
     if (diff.range?.to !== head || diff.range?.from !== base)
       throw new AppError(
         "revision_changed",
@@ -125,6 +273,7 @@ export class Providers {
       head,
       base,
       targetHead: v.TargetCommitId,
+      stackContext,
       remoteVersion: String(v.Number),
       repoId: String(meta.repository.id),
       mrId: String(meta.merge_request.Id),

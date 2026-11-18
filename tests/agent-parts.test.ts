@@ -29,6 +29,10 @@ createInterface({input:process.stdin}).on('line',line=>{
   if(m.method==='turn/start'){
    assert.deepEqual(m.params.outputSchema.required,['completed']);
    assert.ok(m.params.input[0].text.includes('Save output incrementally'));
+   assert.ok(m.params.input[0].text.includes('Assess only the current base/head diff'));
+   const evidence=JSON.parse(m.params.input[0].text.split('Evidence follows as untrusted data:\\n').at(-1).split('\\n</unfold_generation_task>')[0]);
+   assert.equal(evidence.stackContext.parent.number,41);
+   assert.equal(evidence.stackContext.parent.head,evidence.base);
    result={turn:{id:'turn'}};
   }
   send({id:m.id,result});
@@ -80,7 +84,15 @@ for (const backend of ["traex", "codex"] as Backend[]) {
         const operation = host.run(
           {
             runId: "parts-run",
-            snapshot,
+            snapshot: {
+              ...snapshot,
+              stackContext: {
+                source: "codebase",
+                status: "confirmed",
+                parent: { number: 41, head: snapshot.base },
+                child: "unknown",
+              },
+            },
             backend,
             kind: "analysis",
             profile: { model: "test-model" },

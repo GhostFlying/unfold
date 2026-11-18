@@ -42,6 +42,27 @@ export interface Comment {
   outdated?: boolean;
   url?: string;
 }
+export type StackNeighbor = {
+  number?: number;
+  url?: string;
+  changeId?: string;
+  // Observed neighbor head. The current layer's diff uses Snapshot.base.
+  head?: string;
+  remoteVersion?: string;
+};
+export type StackContext =
+  | { source: "github" | "codebase"; status: "unknown" }
+  | {
+      source: "github" | "lynxstack" | "codebase";
+      status: "confirmed";
+      targetBranch?: string;
+      number?: number;
+      position?: number;
+      size?: number;
+      changeId?: string;
+      parent: StackNeighbor | "unknown" | null;
+      child: StackNeighbor | "unknown" | null;
+    };
 export interface Snapshot {
   id: string;
   target: Target;
@@ -50,6 +71,7 @@ export interface Snapshot {
   head: string;
   base: string;
   targetHead?: string;
+  stackContext?: StackContext;
   ownership?: Ownership;
   remoteVersion: string;
   repoId: string;
